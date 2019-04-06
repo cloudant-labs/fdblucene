@@ -90,7 +90,7 @@ public final class FDBIndexInput extends IndexInput {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: "  + this.length);
           }
-        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, offset, length);
+        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, this.offset + offset, length);
     }
 
     private byte[] currentPageKey() {
