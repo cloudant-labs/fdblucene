@@ -7,6 +7,20 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
+import org.apache.lucene.codecs.lucene80.Lucene80Codec;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.document.Field.Store;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
@@ -88,6 +102,30 @@ public class SimpleFDBDirectoryTest {
         final IndexInput in = dir.openInput("baz", null);
         assertEquals(12L, in.readLong());
         in.close();
+    }
+
+    @Test
+    public void indexSomething() throws Exception {
+        final IndexWriterConfig config = new IndexWriterConfig();
+        config.setUseCompoundFile(false);
+        config.setCodec(new Lucene80Codec());
+
+        try (final IndexWriter writer = new IndexWriter(dir, config)) {
+            final Document doc = new Document();
+            doc.add(new TextField("foo", "hello everybody", Store.NO));
+            doc.add(new StringField("_id", "doc1", Store.YES));
+            writer.addDocument(doc);
+            writer.commit();
+        }
+
+        try (final IndexReader reader = DirectoryReader.open(dir)) {
+            final IndexSearcher searcher = new IndexSearcher(reader);
+            final Query query = new TermQuery(new Term("_id", "doc1"));
+            final TopDocs topDocs = searcher.search(query,  1);
+            assertEquals(1, topDocs.totalHits.value);
+            final Document doc = reader.document(topDocs.scoreDocs[0].doc);
+            assertEquals("doc1", doc.get("_id"));
+        }
     }
 
 }
