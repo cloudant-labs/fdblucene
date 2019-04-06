@@ -46,7 +46,7 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public byte readByte() throws IOException {
-        if (pointer > length) {
+        if (pointer == length) {
             throw new EOFException("Attempt to read past end of file");
         }
         
@@ -87,6 +87,9 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public IndexInput slice(final String sliceDescription, final long offset, final long length) throws IOException {
+        if (offset < 0 || length < 0 || offset + length > this.length()) {
+            throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: "  + this.length);
+          }
         return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, offset, length);
     }
 
