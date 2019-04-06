@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 
+import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
@@ -40,37 +41,48 @@ public final class FDBDirectory extends Directory {
 
     private final TransactionContext txc;
     private final DirectorySubspace dir;
+    private boolean closed;
 
     private FDBDirectory(final TransactionContext txc, final DirectorySubspace dir) {
         this.txc = txc;
         this.dir = dir;
+        this.closed = false;
     }
 
     @Override
     public void close() throws IOException {
-        // Intentionally empty
+        closed = true;
     }
 
     @Override
     public IndexOutput createOutput(final String name, final IOContext context) throws IOException {
-        return txc.run(txn -> {
-            try {
+        if (closed) {
+            throw new AlreadyClosedException(dir + " is closed");
+        }
+
+        try {
+            return txc.run(txn -> {
                 final DirectorySubspace result = dir.create(txn, asList(name)).join();
                 txn.set(result.pack("length"), FDBUtil.encodeLong(0L));
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + result + "\")";
                 return new FDBIndexOutput(resourceDescription, name, txc, result);
-            } catch (final CompletionException e) {
-                if (e.getCause() instanceof DirectoryAlreadyExistsException) {
-                    throw new CompletionException(new FileAlreadyExistsException(name + " already exists."));
-                }
-                throw (e);
+
+            });
+        } catch (final CompletionException e) {
+            if (e.getCause() instanceof DirectoryAlreadyExistsException) {
+                throw new FileAlreadyExistsException(name + " already exists.");
             }
-        });
+            throw new IOException(e);
+        }
     }
 
     @Override
     public IndexOutput createTempOutput(final String prefix, final String suffix, final IOContext context)
             throws IOException {
+        if (closed) {
+            throw new AlreadyClosedException(dir + " is closed");
+        }
+
         final DirectorySubspace subdir = txc.run(txn -> {
             while (true) {
                 final List<String> subpath = asList(
@@ -98,17 +110,17 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public long fileLength(final String name) throws IOException {
-        return txc.run(txn -> {
-            try {
+        try {
+            return txc.run(txn -> {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 return FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
-            } catch (final CompletionException e) {
-                if (e.getCause() instanceof NoSuchDirectoryException) {
-                    throw new CompletionException(new FileNotFoundException(name + " does not exist."));
-                }
-                throw (e);
+            });
+        } catch (final CompletionException e) {
+            if (e.getCause() instanceof NoSuchDirectoryException) {
+                throw new FileNotFoundException(name + " does not exist.");
             }
-        });
+            throw new IOException(e);
+        }
     }
 
     @Override
@@ -124,19 +136,23 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public IndexInput openInput(final String name, final IOContext context) throws IOException {
-        return txc.run(txn -> {
-            try {
+        if (closed) {
+            throw new AlreadyClosedException(dir + " is closed");
+        }        
+        
+        try {
+            return txc.run(txn -> {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 final long length = FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
                 return new FDBIndexInput(resourceDescription, txc, subdir, 0L, length);
-            } catch (final CompletionException e) {
-                if (e.getCause() instanceof NoSuchDirectoryException) {
-                    throw new CompletionException(new FileNotFoundException(name + " does not exist."));
-                }
-                throw (e);
+            });
+        } catch (final CompletionException e) {
+            if (e.getCause() instanceof NoSuchDirectoryException) {
+                throw new FileNotFoundException(name + " does not exist.");
             }
-        });
+            throw new IOException(e);
+        }
     }
 
     @Override

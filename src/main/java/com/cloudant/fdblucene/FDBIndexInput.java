@@ -1,5 +1,6 @@
 package com.cloudant.fdblucene;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -45,6 +46,10 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public byte readByte() throws IOException {
+        if (pointer > length) {
+            throw new EOFException("Attempt to read past end of file");
+        }
+        
         if (page == null) {
             final byte[] key = currentPageKey();
             page = txc.run(txn -> {
@@ -58,6 +63,10 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void readBytes(final byte[] b, final int offset, final int len) throws IOException {
+        if (pointer + len > length) {
+            throw new EOFException("Attempt to read past end of file");
+        }
+
         // TODO optimise :)
         for (int i = 0; i < len; i++) {
             b[offset + i] = readByte();
@@ -66,6 +75,10 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void seek(final long pos) throws IOException {
+        if (pos > length) {
+            throw new EOFException("Attempt to seek past end of file");
+        }
+        
         if (FDBUtil.posToPage(pointer) != FDBUtil.posToPage(pos)) {
             page = null;
         }

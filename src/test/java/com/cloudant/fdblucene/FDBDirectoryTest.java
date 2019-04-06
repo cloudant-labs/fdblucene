@@ -9,7 +9,9 @@ import org.junit.BeforeClass;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.FDB;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class FDBDirectoryTest extends BaseDirectoryTestCase {
 
     private static Database DB;
