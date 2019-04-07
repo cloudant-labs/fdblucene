@@ -49,26 +49,28 @@ public final class FDBIndexInput extends IndexInput {
             throw new EOFException("Attempt to read past end of file");
         }
 
-        if (page == null) {
-            final byte[] key = currentPageKey();
-            page = txc.run(txn -> {
-                return txn.get(key).join();
-            });
-        }
+        loadPageIfNull();
         byte result = page[FDBUtil.posToOffset(offset + pointer)];
         seek(this.pointer + 1);
         return result;
     }
 
     @Override
-    public void readBytes(final byte[] b, final int offset, final int len) throws IOException {
-        if (pointer + len > length) {
+    public void readBytes(final byte[] b, final int offset, final int length) throws IOException {
+        if (pointer + length > this.length) {
             throw new EOFException("Attempt to read past end of file");
         }
 
-        // TODO optimise :)
-        for (int i = 0; i < len; i++) {
-            b[offset + i] = readByte();
+        int readOffset = offset;
+        int readLength = length;
+        while (readLength > 0) {
+            loadPageIfNull();
+            final int bytesToRead = Math.min(readLength,  page.length - FDBUtil.posToOffset(this.offset + this.pointer));
+            System.arraycopy(page, FDBUtil.posToOffset(this.offset + this.pointer),
+                    b, readOffset, bytesToRead);
+            readOffset += bytesToRead;
+            readLength -= bytesToRead;
+            seek(pointer + bytesToRead);
         }
     }
 
@@ -90,6 +92,15 @@ public final class FDBIndexInput extends IndexInput {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
         return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, this.offset + offset, length);
+    }
+
+    private void loadPageIfNull() {
+        if (page == null) {
+            final byte[] key = currentPageKey();
+            page = txc.run(txn -> {
+                return txn.get(key).join();
+            });
+        }
     }
 
     private byte[] currentPageKey() {
