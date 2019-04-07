@@ -78,7 +78,7 @@ public final class FDBIndexInput extends IndexInput {
             throw new EOFException("Attempt to seek past end of file");
         }
 
-        if (FDBUtil.posToPage(pointer) != FDBUtil.posToPage(pos)) {
+        if (FDBUtil.posToPage(this.offset + pointer) != FDBUtil.posToPage(this.offset + pos)) {
             page = null;
         }
         pointer = pos;
