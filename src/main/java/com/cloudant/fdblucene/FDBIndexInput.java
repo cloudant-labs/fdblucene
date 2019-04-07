@@ -2,7 +2,6 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.Arrays;
 
 import org.apache.lucene.store.IndexInput;
 

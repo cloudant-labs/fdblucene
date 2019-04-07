@@ -4,14 +4,12 @@ import static org.junit.Assert.assertEquals;
 
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.security.SecureRandom;
-import java.util.Arrays;
 
 import org.apache.lucene.codecs.lucene80.Lucene80Codec;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.TextField;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;

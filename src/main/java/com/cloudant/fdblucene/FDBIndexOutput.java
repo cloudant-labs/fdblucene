@@ -1,7 +1,6 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
@@ -59,8 +58,26 @@ public final class FDBIndexOutput extends IndexOutput {
         pageOffset++;
         pointer++;
         crc.update(b);
+        flushPageIfFull();
+    }
 
-        // Flush page if full.
+    @Override
+    public void writeBytes(final byte[] b, final int offset, final int length) throws IOException {
+        int writeOffset = offset;
+        int writeLength = length;
+        while (writeLength > 0) {
+            final int bytesToCopy = Math.min(writeLength, page.length - pageOffset);
+            System.arraycopy(b,  writeOffset,  page,  pageOffset, bytesToCopy);
+            writeOffset += bytesToCopy;
+            pageOffset += bytesToCopy;
+            pointer += bytesToCopy;
+            writeLength -= bytesToCopy;
+            flushPageIfFull();
+        }
+        crc.update(b, offset, length);
+    }
+    
+    private void flushPageIfFull() {
         if (pageOffset == page.length) {
             final byte[] key = pageKey(this.pointer - 1);
             txc.run(txn -> {
@@ -68,14 +85,6 @@ public final class FDBIndexOutput extends IndexOutput {
                 return null;
             });
             pageOffset = 0;
-        }
-    }
-
-    @Override
-    public void writeBytes(final byte[] b, final int offset, final int length) throws IOException {
-        // TODO optimise :)
-        for (int i = 0; i < length; i++) {
-            writeByte(b[offset + i]);
         }
     }
 
