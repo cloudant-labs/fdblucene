@@ -74,10 +74,7 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void writeMoreData() throws Exception {
-        final byte[] expectedBuf = new byte[1024 * 1024];
-        for (int i = 0; i < expectedBuf.length; i++) {
-            expectedBuf[i] = (byte) (i % 0x7f);
-        }
+        final byte[] expectedBuf = FDBTestUtil.testArray(1024 * 1024);
 
         final IndexOutput out = dir.createOutput("bar", null);
         out.writeBytes(expectedBuf, expectedBuf.length);
