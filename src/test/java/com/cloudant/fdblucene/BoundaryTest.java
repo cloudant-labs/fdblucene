@@ -101,4 +101,23 @@ public class BoundaryTest {
         Assert.assertArrayEquals(expected, actual);
     }
 
+    @Test
+    public void testRandomReads() throws Exception {
+        final byte[] expected = FDBTestUtil.testArray(size);
+        final IndexOutput out = DIR.createTempOutput("foo", "bar", null);
+        out.writeBytes(expected, size);
+        out.close();
+
+        final byte[] actual = new byte[expected.length];
+        final IndexInput in = DIR.openInput(out.getName(), null);
+        int remaining = size;
+        final Random rnd = new Random();
+        while (remaining > 0) {
+            final int count = Math.min(remaining, rnd.nextInt(20));
+            in.readBytes(actual, size - remaining, count);
+            remaining -= count;
+        }
+        Assert.assertArrayEquals(expected, actual);
+    }
+
 }
