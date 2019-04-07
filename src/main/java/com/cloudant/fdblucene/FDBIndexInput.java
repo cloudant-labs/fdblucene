@@ -48,7 +48,7 @@ public final class FDBIndexInput extends IndexInput {
         if (pointer == length) {
             throw new EOFException("Attempt to read past end of file");
         }
-        
+
         if (page == null) {
             final byte[] key = currentPageKey();
             page = txc.run(txn -> {
@@ -77,7 +77,7 @@ public final class FDBIndexInput extends IndexInput {
         if (pos > length) {
             throw new EOFException("Attempt to seek past end of file");
         }
-        
+
         if (FDBUtil.posToPage(pointer) != FDBUtil.posToPage(pos)) {
             page = null;
         }
@@ -87,8 +87,8 @@ public final class FDBIndexInput extends IndexInput {
     @Override
     public IndexInput slice(final String sliceDescription, final long offset, final long length) throws IOException {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
-            throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: "  + this.length);
-          }
+            throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
+        }
         return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, this.offset + offset, length);
     }
 

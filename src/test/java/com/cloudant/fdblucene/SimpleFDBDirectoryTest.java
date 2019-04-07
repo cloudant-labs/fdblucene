@@ -49,7 +49,7 @@ public class SimpleFDBDirectoryTest {
         dir = FDBDirectory.open(DB, path);
         cleanupDir();
     }
-    
+
     @After
     public void cleanupDir() throws Exception {
         if (dir == null) {
@@ -59,7 +59,7 @@ public class SimpleFDBDirectoryTest {
             dir.deleteFile(name);
         }
     }
-    
+
     @Test
     public void basicOutput() throws Exception {
         assertEquals(0, dir.listAll().length);
@@ -116,7 +116,7 @@ public class SimpleFDBDirectoryTest {
         try (final IndexReader reader = DirectoryReader.open(dir)) {
             final IndexSearcher searcher = new IndexSearcher(reader);
             final Query query = new TermQuery(new Term("_id", "doc1"));
-            final TopDocs topDocs = searcher.search(query,  1);
+            final TopDocs topDocs = searcher.search(query, 1);
             assertEquals(1, topDocs.totalHits.value);
             final Document doc = reader.document(topDocs.scoreDocs[0].doc);
             assertEquals("doc1", doc.get("_id"));

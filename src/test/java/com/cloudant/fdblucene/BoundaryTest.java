@@ -40,8 +40,7 @@ public class BoundaryTest {
                 (2 * FDBUtil.PAGE_SIZE) - 1,
                 (2 * FDBUtil.PAGE_SIZE),
                 (2 * FDBUtil.PAGE_SIZE) + 1,
-                (2 * FDBUtil.PAGE_SIZE) + 2
-        );
+                (2 * FDBUtil.PAGE_SIZE) + 2);
     }
 
     @BeforeClass
@@ -80,7 +79,7 @@ public class BoundaryTest {
         in.readBytes(actual, 0, size);
         Assert.assertArrayEquals(expected, actual);
     }
-    
+
     @Test
     public void testRandomWrites() throws Exception {
         final byte[] expected = FDBTestUtil.testArray(size);
@@ -93,7 +92,7 @@ public class BoundaryTest {
             out.writeBytes(expected, size - remaining, count);
             remaining -= count;
         }
-        
+
         out.close();
 
         final byte[] actual = new byte[expected.length];

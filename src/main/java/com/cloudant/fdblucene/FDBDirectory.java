@@ -138,8 +138,8 @@ public final class FDBDirectory extends Directory {
     public IndexInput openInput(final String name, final IOContext context) throws IOException {
         if (closed) {
             throw new AlreadyClosedException(dir + " is closed");
-        }        
-        
+        }
+
         try {
             return txc.run(txn -> {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();

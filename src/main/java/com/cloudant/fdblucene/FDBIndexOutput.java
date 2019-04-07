@@ -67,7 +67,7 @@ public final class FDBIndexOutput extends IndexOutput {
         int writeLength = length;
         while (writeLength > 0) {
             final int bytesToCopy = Math.min(writeLength, page.length - pageOffset);
-            System.arraycopy(b,  writeOffset,  page,  pageOffset, bytesToCopy);
+            System.arraycopy(b, writeOffset, page, pageOffset, bytesToCopy);
             writeOffset += bytesToCopy;
             pageOffset += bytesToCopy;
             pointer += bytesToCopy;
@@ -76,7 +76,7 @@ public final class FDBIndexOutput extends IndexOutput {
         }
         crc.update(b, offset, length);
     }
-    
+
     private void flushPageIfFull() {
         if (pageOffset == page.length) {
             final byte[] key = pageKey(this.pointer - 1);
