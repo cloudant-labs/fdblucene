@@ -1,7 +1,8 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.Collections;
+import java.util.concurrent.CompletionException;
 
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Lock;
@@ -9,41 +10,33 @@ import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.lucene.store.LockReleaseFailedException;
 
 import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.directory.DirectoryAlreadyExistsException;
+import com.apple.foundationdb.directory.DirectorySubspace;
 
 public final class FDBLock extends Lock {
 
-    public static Lock obtain(final TransactionContext txc, final String name, final byte[] key) throws IOException {
-        final byte[] value = txc.run(txn -> {
-            if (txn.get(key).join() != null) {
-                return null;
+    public static Lock obtain(final TransactionContext txc, final DirectorySubspace subdir, final String name) throws IOException {
+        final DirectorySubspace lock;
+        try {
+            lock = subdir.create(txc, Collections.singletonList(name)).join();
+        }  catch (final CompletionException e) {
+            if (e.getCause() instanceof DirectoryAlreadyExistsException) {
+                throw new LockObtainFailedException(name + " already acquired");
             }
-            final byte[] v = randomValue();
-            txn.set(key, v);
-            return v;
-        });
-        if (value == null) {
-            throw new LockObtainFailedException(name + " already acquired");
+            throw (e);
         }
-        return new FDBLock(txc, name, key, value);
-    }
-
-    private static byte[] randomValue() {
-        final byte[] result = new byte[32];
-        FDBUtil.RANDOM.nextBytes(result);
-        return result;
+        return new FDBLock(txc, lock, name);
     }
 
     private final TransactionContext txc;
+    private final DirectorySubspace lock;
     private final String name;
-    private final byte[] key;
-    private final byte[] value;
     private boolean closed = false;
 
-    private FDBLock(final TransactionContext txc, final String name, final byte[] key, final byte[] value) {
+    private FDBLock(final TransactionContext txc, final DirectorySubspace lock, final String name) {
         this.txc = txc;
+        this.lock = lock;
         this.name = name;
-        this.key = key;
-        this.value = value;
     }
 
     @Override
@@ -52,14 +45,7 @@ public final class FDBLock extends Lock {
             return;
         }
 
-        final boolean released = txc.run(txn -> {
-            final byte[] value = txn.get(key).join();
-            if (Arrays.equals(this.value, value)) {
-                txn.clear(key);
-                return true;
-            }
-            return false;
-        });
+        final boolean released = lock.removeIfExists(txc).join();
         if (!released) {
             throw new LockReleaseFailedException(name + " not released properly");
         }
@@ -72,13 +58,7 @@ public final class FDBLock extends Lock {
             throw new AlreadyClosedException(name + " already closed.");
         }
 
-        final boolean valid = txc.run(txn -> {
-            final byte[] value = txn.get(key).join();
-            if (value == null) {
-                return false;
-            }
-            return Arrays.equals(this.value, value);
-        });
+        final boolean valid = lock.exists(txc).join();
         if (!valid) {
             throw new IOException(name + " no longer valid");
         }
