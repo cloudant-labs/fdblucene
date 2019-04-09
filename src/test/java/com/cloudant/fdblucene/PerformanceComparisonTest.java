@@ -21,7 +21,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.NIOFSDirectory;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,7 +44,8 @@ public class PerformanceComparisonTest {
                 .getPath(System.getProperty("tempDir", System.getProperty("java.io.tmpdir")));
         final Path tmpDir = javaTempDir.resolve("foo");
 
-        return Arrays.asList(FDBDirectory.open(db, tmpDir), FSDirectory.open(tmpDir));
+        return Arrays.asList(FDBDirectory.open(db, tmpDir), new NIOFSDirectory
+                (tmpDir));
     }
 
     private Directory dir;
