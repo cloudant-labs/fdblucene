@@ -96,7 +96,7 @@ public final class FDBIndexInput extends IndexInput {
     private void loadPageIfNull() {
         if (page == null) {
             final byte[] key = currentPageKey();
-            page = txc.run(txn -> {
+            page = txc.read(txn -> {
                 return txn.get(key).join();
             });
         }
