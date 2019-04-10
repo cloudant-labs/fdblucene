@@ -2,6 +2,9 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import org.apache.lucene.store.IndexInput;
 
@@ -17,6 +20,15 @@ public final class FDBIndexInput extends IndexInput {
     private byte[] page;
     private long pointer;
 
+    private final Map<Long, byte[]> pageCache = new LinkedHashMap<Long, byte[]>(16, 0.75f, true) {
+
+        @Override
+        protected boolean removeEldestEntry(final Entry<Long, byte[]> eldest) {
+            return size() > 5000;
+        }
+
+    };
+
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir,
             final long offset, final long length) {
         super(resourceDescription);
@@ -30,7 +42,7 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void close() throws IOException {
-        // Intentionally empty.
+        pageCache.clear();
     }
 
     @Override
@@ -95,16 +107,24 @@ public final class FDBIndexInput extends IndexInput {
 
     private void loadPageIfNull() {
         if (page == null) {
-            final byte[] key = currentPageKey();
-            page = txc.read(txn -> {
-                return txn.get(key).join();
-            });
+            final long currentPage = currentPage();
+            page = pageCache.get(currentPage);
+            if (page == null) {
+                final byte[] key = pageKey(currentPage);
+                page = txc.read(txn -> {
+                    return txn.get(key).join();
+                });
+                pageCache.put(currentPage, page);
+            }
         }
     }
 
-    private byte[] currentPageKey() {
-        final long currentPage = FDBUtil.posToPage(offset + pointer);
-        return subdir.pack(currentPage);
+    private long currentPage() {
+        return FDBUtil.posToPage(offset + pointer);
+    }
+
+    private byte[] pageKey(final long pageNumber) {
+        return subdir.pack(pageNumber);
     }
 
 }
