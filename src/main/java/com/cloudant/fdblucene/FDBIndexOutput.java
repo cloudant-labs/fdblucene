@@ -1,12 +1,14 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
 
 import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.async.AsyncUtil;
 import com.apple.foundationdb.directory.DirectorySubspace;
 
 public final class FDBIndexOutput extends IndexOutput {
@@ -17,6 +19,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private int txnBufferOffset;
     private final CRC32 crc;
 
+    private CompletableFuture<Void> future;
     private long pointer;
 
     public FDBIndexOutput(final String resourceDescription, final String name, final TransactionContext txc,
@@ -26,11 +29,13 @@ public final class FDBIndexOutput extends IndexOutput {
         this.subdir = subdir;
         txnBuffer = FDBUtil.newTxnBuffer();
         crc = new CRC32();
+        future = AsyncUtil.DONE;
         pointer = 0L;
     }
 
     @Override
     public void close() throws IOException {
+        future.join();
         txc.run(txn -> {
             flushTxnBuffer(txn);
             txn.set(subdir.pack("length"), FDBUtil.encodeLong(pointer));
@@ -80,9 +85,10 @@ public final class FDBIndexOutput extends IndexOutput {
     }
 
     private void flushTxnBuffer() {
-        txc.run(txn -> {
+        future.join();
+        future = txc.runAsync(txn -> {
             flushTxnBuffer(txn);
-            return null;
+            return AsyncUtil.DONE;
         });
     }
 
