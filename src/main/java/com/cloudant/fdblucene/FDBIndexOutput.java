@@ -22,6 +22,9 @@ public final class FDBIndexOutput extends IndexOutput {
     private CompletableFuture<Void> lastFlushFuture;
     private long pointer;
 
+    private long readVersion;
+    private long readVersionAt;
+
     public FDBIndexOutput(final String resourceDescription, final String name, final TransactionContext txc,
             final DirectorySubspace subdir) {
         super(resourceDescription, name);
@@ -31,12 +34,15 @@ public final class FDBIndexOutput extends IndexOutput {
         crc = new CRC32();
         lastFlushFuture = AsyncUtil.DONE;
         pointer = 0L;
+        readVersion = -1L;
+        readVersionAt = System.currentTimeMillis();
     }
 
     @Override
     public void close() throws IOException {
         lastFlushFuture.join();
         txc.run(txn -> {
+            setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,close,%d", getName(), pointer));
             flushTxnBuffer(txn);
             txn.options().setNextWriteNoWriteConflictRange();
@@ -89,6 +95,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private void flushTxnBuffer() {
         lastFlushFuture.join();
         lastFlushFuture = txc.runAsync(txn -> {
+            setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
             flushTxnBuffer(txn);
             return AsyncUtil.DONE;
@@ -111,6 +118,17 @@ public final class FDBIndexOutput extends IndexOutput {
     private byte[] pageKey(final long pos) {
         final long currentPage = FDBUtil.posToPage(pos);
         return subdir.pack(currentPage);
+    }
+
+    private void setReadVersion(final Transaction txn) {
+        final long now = System.currentTimeMillis();
+        final long readVersionAge = now - this.readVersionAt;
+        if (this.readVersion == -1L || readVersionAge > 150) {
+            this.readVersion = txn.getReadVersion().join();
+            this.readVersionAt = now;
+        } else {
+            txn.setReadVersion(readVersion);
+        }
     }
 
 }
