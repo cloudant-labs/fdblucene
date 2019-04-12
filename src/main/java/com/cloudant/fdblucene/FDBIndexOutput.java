@@ -103,14 +103,20 @@ public final class FDBIndexOutput extends IndexOutput {
     }
 
     private void flushTxnBuffer(final Transaction txn) {
-        final byte[] value = FDBUtil.newPage();
+        final byte[] fullPage = FDBUtil.newPage();
         for (int i = 0; i < txnBufferOffset; i += FDBUtil.PAGE_SIZE) {
             final long pos = this.pointer - txnBufferOffset + i;
             final byte[] key = pageKey(pos);
-            System.arraycopy(txnBuffer,  i,  value,  0,
-                    Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i));
+            final int flushSize = Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i);
+            final byte[] bufToFlush;
+            if (flushSize == FDBUtil.PAGE_SIZE) {
+                bufToFlush = fullPage;
+            } else {
+                bufToFlush = new byte[flushSize];
+            }
+            System.arraycopy(txnBuffer, i, bufToFlush, 0, flushSize);
             txn.options().setNextWriteNoWriteConflictRange();
-            txn.set(key, value);
+            txn.set(key, bufToFlush);
         }
         txnBufferOffset = 0;
     }
