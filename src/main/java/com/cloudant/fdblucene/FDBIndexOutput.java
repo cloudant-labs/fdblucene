@@ -38,6 +38,7 @@ public final class FDBIndexOutput extends IndexOutput {
         future.join();
         txc.run(txn -> {
             flushTxnBuffer(txn);
+            txn.options().setNextWriteNoWriteConflictRange();
             txn.set(subdir.pack("length"), FDBUtil.encodeLong(pointer));
             return null;
         });
@@ -99,6 +100,7 @@ public final class FDBIndexOutput extends IndexOutput {
             final byte[] key = pageKey(pos);
             System.arraycopy(txnBuffer,  i,  value,  0,
                     Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i));
+            txn.options().setNextWriteNoWriteConflictRange();
             txn.set(key, value);
         }
         txnBufferOffset = 0;
