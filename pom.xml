@@ -65,7 +65,7 @@
                 <environmentVariables>
                   <FDB_NETWORK_OPTION_TRACE_ENABLE></FDB_NETWORK_OPTION_TRACE_ENABLE>
                 </environmentVariables>
-                <argLine>-server</argLine>
+                <argLine>-server -Xmx2G</argLine>
               </configuration>
             </plugin>
         </plugins>
