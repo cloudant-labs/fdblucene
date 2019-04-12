@@ -2,10 +2,9 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Map.Entry;
 
+import org.apache.commons.jcs.JCS;
+import org.apache.commons.jcs.access.CacheAccess;
 import org.apache.lucene.store.IndexInput;
 
 import com.apple.foundationdb.TransactionContext;
@@ -21,14 +20,7 @@ public final class FDBIndexInput extends IndexInput {
     private byte[] page;
     private long pointer;
 
-    private final Map<Long, byte[]> pageCache = new LinkedHashMap<Long, byte[]>(16, 0.75f, true) {
-
-        @Override
-        protected boolean removeEldestEntry(final Entry<Long, byte[]> eldest) {
-            return size() > 5000;
-        }
-
-    };
+    private final CacheAccess<String, byte[]> pageCache = JCS.getInstance("fdb");
 
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
             final long offset, final long length) {
@@ -44,7 +36,7 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void close() throws IOException {
-        pageCache.clear();
+        // empty.
     }
 
     @Override
@@ -110,14 +102,14 @@ public final class FDBIndexInput extends IndexInput {
     private void loadPageIfNull() {
         if (page == null) {
             final long currentPage = currentPage();
-            page = pageCache.get(currentPage);
+            page = pageCache.get(currentPageName());
             if (page == null) {
                 final byte[] key = pageKey(currentPage);
                 page = txc.read(txn -> {
                     txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
                     return txn.get(key).join();
                 });
-                pageCache.put(currentPage, page);
+                pageCache.put(currentPageName(), page);
             }
         }
     }
@@ -128,6 +120,10 @@ public final class FDBIndexInput extends IndexInput {
 
     private byte[] pageKey(final long pageNumber) {
         return subdir.pack(pageNumber);
+    }
+
+    private String currentPageName() {
+        return String.format("%s-%d", toString(), currentPage());
     }
 
 }
