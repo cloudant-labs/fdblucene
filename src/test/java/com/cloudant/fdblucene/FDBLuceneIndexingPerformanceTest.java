@@ -14,7 +14,6 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.TermQuery;
@@ -57,7 +56,6 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
         cleanup(dir);
         final IndexWriterConfig config = new IndexWriterConfig();
         config.setUseCompoundFile(false);
-        config.setMergePolicy(NoMergePolicy.INSTANCE);
         config.setCodec(new Lucene80Codec());
 
         try (final LineFileDocs docs = new LineFileDocs(random(), LuceneTestCase.DEFAULT_LINE_DOCS_FILE);
