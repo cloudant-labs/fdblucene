@@ -64,9 +64,11 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
             final long maxDocCount = 10000;
             final long start = System.currentTimeMillis();
             long docCount = 0;
+            final StringField idField = new StringField("_id", "", Store.YES);
             for (int i = 0; i < maxDocCount; i++) {
                 final Document doc = docs.nextDoc();
-                doc.add(new StringField("_id", "doc-" + i, Store.YES));
+                idField.setStringValue("doc-" + i);
+                doc.add(idField);
                 docCount++;
                 writer.addDocument(doc);
             }
