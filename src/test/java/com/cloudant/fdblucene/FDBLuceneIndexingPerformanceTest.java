@@ -44,6 +44,7 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
 
     private void runIndexing(final Directory dir)
             throws IOException {
+        cleanup(dir);
         final IndexWriterConfig config = new IndexWriterConfig();
         config.setUseCompoundFile(false);
         config.setMergePolicy(NoMergePolicy.INSTANCE);
@@ -68,6 +69,12 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
             final long duration = System.currentTimeMillis() - start;
             final long docsPerSecond = (docCount * 1000) / duration;
             System.out.printf(dir.getClass().getName() + " indexed at %d docs per second.\n", docsPerSecond);
+        }
+    }
+
+    private void cleanup(final Directory dir) throws IOException {
+        for (final String name : dir.listAll()) {
+            dir.deleteFile(name);
         }
     }
 
