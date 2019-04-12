@@ -1,21 +1,25 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
 
+import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.async.AsyncUtil;
 import com.apple.foundationdb.directory.DirectorySubspace;
 
 public final class FDBIndexOutput extends IndexOutput {
 
     private final TransactionContext txc;
     private final DirectorySubspace subdir;
-    private final byte[] page;
-    private int pageOffset;
+    private final byte[] txnBuffer;
+    private int txnBufferOffset;
     private final CRC32 crc;
 
+    private CompletableFuture<Void> future;
     private long pointer;
 
     public FDBIndexOutput(final String resourceDescription, final String name, final TransactionContext txc,
@@ -23,20 +27,17 @@ public final class FDBIndexOutput extends IndexOutput {
         super(resourceDescription, name);
         this.txc = txc;
         this.subdir = subdir;
-        page = FDBUtil.newPage();
+        txnBuffer = FDBUtil.newTxnBuffer();
         crc = new CRC32();
+        future = AsyncUtil.DONE;
         pointer = 0L;
     }
 
     @Override
     public void close() throws IOException {
+        future.join();
         txc.run(txn -> {
-            if (pageOffset > 0) {
-                final byte[] key = pageKey(this.pointer);
-                final byte[] value = new byte[pageOffset];
-                System.arraycopy(page, 0, value, 0, pageOffset);
-                txn.set(key, value);
-            }
+            flushTxnBuffer(txn);
             txn.set(subdir.pack("length"), FDBUtil.encodeLong(pointer));
             return null;
         });
@@ -54,11 +55,11 @@ public final class FDBIndexOutput extends IndexOutput {
 
     @Override
     public void writeByte(final byte b) throws IOException {
-        page[pageOffset] = b;
-        pageOffset++;
+        txnBuffer[txnBufferOffset] = b;
+        txnBufferOffset++;
         pointer++;
         crc.update(b);
-        flushPageIfFull();
+        flushTxnBufferIfFull();
     }
 
     @Override
@@ -66,26 +67,41 @@ public final class FDBIndexOutput extends IndexOutput {
         int writeOffset = offset;
         int writeLength = length;
         while (writeLength > 0) {
-            final int bytesToCopy = Math.min(writeLength, page.length - pageOffset);
-            System.arraycopy(b, writeOffset, page, pageOffset, bytesToCopy);
+            final int bytesToCopy = Math.min(writeLength, txnBuffer.length - txnBufferOffset);
+            System.arraycopy(b, writeOffset, txnBuffer, txnBufferOffset, bytesToCopy);
             writeOffset += bytesToCopy;
-            pageOffset += bytesToCopy;
+            txnBufferOffset += bytesToCopy;
             pointer += bytesToCopy;
             writeLength -= bytesToCopy;
-            flushPageIfFull();
+            flushTxnBufferIfFull();
         }
         crc.update(b, offset, length);
     }
 
-    private void flushPageIfFull() {
-        if (pageOffset == page.length) {
-            final byte[] key = pageKey(this.pointer - 1);
-            txc.run(txn -> {
-                txn.set(key, page);
-                return null;
-            });
-            pageOffset = 0;
+    private void flushTxnBufferIfFull() {
+        if (txnBufferOffset == txnBuffer.length) {
+            flushTxnBuffer();
         }
+    }
+
+    private void flushTxnBuffer() {
+        future.join();
+        future = txc.runAsync(txn -> {
+            flushTxnBuffer(txn);
+            return AsyncUtil.DONE;
+        });
+    }
+
+    private void flushTxnBuffer(final Transaction txn) {
+        final byte[] value = FDBUtil.newPage();
+        for (int i = 0; i < txnBufferOffset; i += FDBUtil.PAGE_SIZE) {
+            final long pos = this.pointer - txnBufferOffset + i;
+            final byte[] key = pageKey(pos);
+            System.arraycopy(txnBuffer,  i,  value,  0,
+                    Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i));
+            txn.set(key, value);
+        }
+        txnBufferOffset = 0;
     }
 
     private byte[] pageKey(final long pos) {

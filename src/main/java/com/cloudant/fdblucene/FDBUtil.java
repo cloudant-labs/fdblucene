@@ -12,6 +12,8 @@ final class FDBUtil {
 
     static final int PAGE_SIZE = 8000;
 
+    static final int TXN_SIZE = 8000000;
+
     private static byte[] pageKey(final Tuple data, final long pageNumber) {
         final byte[] pageKey = data.add(pageNumber).pack();
         return pageKey;
@@ -59,6 +61,10 @@ final class FDBUtil {
 
     static byte[] newPage() {
         return new byte[PAGE_SIZE];
+    }
+
+    static byte[] newTxnBuffer() {
+        return new byte[TXN_SIZE];
     }
 
     static int posToOffset(final long pos) {
