@@ -37,6 +37,7 @@ public final class FDBIndexOutput extends IndexOutput {
     public void close() throws IOException {
         future.join();
         txc.run(txn -> {
+            txn.options().setTransactionLoggingEnable(String.format("FDBIndexOutput.close(%d)", pointer));
             flushTxnBuffer(txn);
             txn.options().setNextWriteNoWriteConflictRange();
             txn.set(subdir.pack("length"), FDBUtil.encodeLong(pointer));
@@ -88,6 +89,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private void flushTxnBuffer() {
         future.join();
         future = txc.runAsync(txn -> {
+            txn.options().setTransactionLoggingEnable(String.format("FDBIndexOutput.flush(%d)", pointer));
             flushTxnBuffer(txn);
             return AsyncUtil.DONE;
         });
