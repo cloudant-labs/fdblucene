@@ -62,6 +62,7 @@ public final class FDBDirectory extends Directory {
 
         try {
             return txc.run(txn -> {
+                txn.options().setTransactionLoggingEnable(String.format("createOutput,%s", name));
                 final DirectorySubspace result = dir.create(txn, asList(name)).join();
                 txn.set(result.pack("length"), FDBUtil.encodeLong(0L));
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + result + "\")";
@@ -84,6 +85,7 @@ public final class FDBDirectory extends Directory {
         }
 
         final DirectorySubspace subdir = txc.run(txn -> {
+            txn.options().setTransactionLoggingEnable(String.format("createTempOutput,%s,%s", prefix, suffix));
             while (true) {
                 final List<String> subpath = asList(
                         String.format("%s%x%s.tmp", prefix, FDBUtil.RANDOM.nextInt(), suffix));
@@ -112,6 +114,7 @@ public final class FDBDirectory extends Directory {
     public long fileLength(final String name) throws IOException {
         try {
             return txc.run(txn -> {
+                txn.options().setTransactionLoggingEnable(String.format("fileLength,%s", name));
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 return FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
             });
@@ -125,7 +128,10 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public String[] listAll() throws IOException {
-        final List<String> result = dir.list(txc).join();
+        final List<String> result = txc.run(txn -> {
+            txn.options().setTransactionLoggingEnable("listAll");
+            return dir.list(txn).join();
+        });
         return result.toArray(new String[0]);
     }
 
@@ -142,6 +148,7 @@ public final class FDBDirectory extends Directory {
 
         try {
             return txc.run(txn -> {
+                txn.options().setTransactionLoggingEnable(String.format("openInput,%s", name));
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 final long length = FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
@@ -157,7 +164,11 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public void rename(final String source, final String dest) throws IOException {
-        dir.move(txc, asList(source), asList(dest)).join();
+        txc.run(txn -> {
+            txn.options().setTransactionLoggingEnable(String.format("move,%s,%s", source, dest));
+            dir.move(txn, asList(source), asList(dest)).join();
+            return null;
+        });
     }
 
     @Override
