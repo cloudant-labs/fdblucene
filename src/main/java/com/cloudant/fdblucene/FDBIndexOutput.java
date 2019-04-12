@@ -19,7 +19,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private int txnBufferOffset;
     private final CRC32 crc;
 
-    private CompletableFuture<Void> future;
+    private CompletableFuture<Void> lastFlushFuture;
     private long pointer;
 
     public FDBIndexOutput(final String resourceDescription, final String name, final TransactionContext txc,
@@ -29,13 +29,13 @@ public final class FDBIndexOutput extends IndexOutput {
         this.subdir = subdir;
         txnBuffer = FDBUtil.newTxnBuffer();
         crc = new CRC32();
-        future = AsyncUtil.DONE;
+        lastFlushFuture = AsyncUtil.DONE;
         pointer = 0L;
     }
 
     @Override
     public void close() throws IOException {
-        future.join();
+        lastFlushFuture.join();
         txc.run(txn -> {
             txn.options().setTransactionLoggingEnable(String.format("%s,out,close,%d", getName(), pointer));
             flushTxnBuffer(txn);
@@ -87,8 +87,8 @@ public final class FDBIndexOutput extends IndexOutput {
     }
 
     private void flushTxnBuffer() {
-        future.join();
-        future = txc.runAsync(txn -> {
+        lastFlushFuture.join();
+        lastFlushFuture = txc.runAsync(txn -> {
             txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
             flushTxnBuffer(txn);
             return AsyncUtil.DONE;
