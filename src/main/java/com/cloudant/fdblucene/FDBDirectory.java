@@ -145,7 +145,7 @@ public final class FDBDirectory extends Directory {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 final long length = FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
-                return new FDBIndexInput(resourceDescription, txc, subdir, 0L, length);
+                return new FDBIndexInput(resourceDescription, txc, subdir, name, 0L, length);
             });
         } catch (final CompletionException e) {
             if (e.getCause() instanceof NoSuchDirectoryException) {

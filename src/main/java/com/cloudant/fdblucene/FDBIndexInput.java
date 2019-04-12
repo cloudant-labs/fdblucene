@@ -15,6 +15,7 @@ public final class FDBIndexInput extends IndexInput {
 
     private final TransactionContext txc;
     private final DirectorySubspace subdir;
+    private final String name;
     private final long offset;
     private final long length;
     private byte[] page;
@@ -29,11 +30,12 @@ public final class FDBIndexInput extends IndexInput {
 
     };
 
-    public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir,
+    public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
             final long offset, final long length) {
         super(resourceDescription);
         this.txc = txc;
         this.subdir = subdir;
+        this.name = name;
         this.offset = offset;
         this.length = length;
         page = null;
@@ -102,7 +104,7 @@ public final class FDBIndexInput extends IndexInput {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
-        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, this.offset + offset, length);
+        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name, this.offset + offset, length);
     }
 
     private void loadPageIfNull() {
@@ -112,6 +114,7 @@ public final class FDBIndexInput extends IndexInput {
             if (page == null) {
                 final byte[] key = pageKey(currentPage);
                 page = txc.read(txn -> {
+                    txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
                     return txn.get(key).join();
                 });
                 pageCache.put(currentPage, page);
