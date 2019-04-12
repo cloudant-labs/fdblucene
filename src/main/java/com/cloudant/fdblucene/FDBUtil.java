@@ -10,7 +10,7 @@ final class FDBUtil {
 
     public static final Random RANDOM = new SecureRandom();
 
-    static final int PAGE_SIZE = 8000;
+    static final int PAGE_SIZE = 100_000;
 
     static final int TXN_SIZE = 1_000_000;
 
