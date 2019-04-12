@@ -51,14 +51,6 @@ final class FDBUtil {
         return result;
     }
 
-    static byte[] getPage(final Database db, final Tuple data, final long pageNumber) {
-        final byte[] pageKey = pageKey(data, pageNumber);
-
-        return db.run(txn -> {
-            return txn.get(pageKey).join();
-        });
-    }
-
     static byte[] newPage() {
         return new byte[PAGE_SIZE];
     }
