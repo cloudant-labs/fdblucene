@@ -65,7 +65,7 @@
                 <environmentVariables>
                   <FDB_NETWORK_OPTION_TRACE_ENABLE></FDB_NETWORK_OPTION_TRACE_ENABLE>
                 </environmentVariables>
-                <argLine>-server -Xmx2G</argLine>
+                <argLine>-server -Xmx2G -Dorg.apache.commons.logging.Log=org.apache.commons.logging.impl.SimpleLog -Dorg.apache.commons.logging.simplelog.defaultlog=warn</argLine>
               </configuration>
             </plugin>
         </plugins>
