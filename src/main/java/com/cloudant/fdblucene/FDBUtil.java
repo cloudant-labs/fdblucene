@@ -3,9 +3,6 @@ package com.cloudant.fdblucene;
 import java.security.SecureRandom;
 import java.util.Random;
 
-import com.apple.foundationdb.Database;
-import com.apple.foundationdb.tuple.Tuple;
-
 final class FDBUtil {
 
     public static final Random RANDOM = new SecureRandom();
@@ -13,11 +10,6 @@ final class FDBUtil {
     static final int PAGE_SIZE = 100_000;
 
     static final int TXN_SIZE = 1_000_000;
-
-    private static byte[] pageKey(final Tuple data, final long pageNumber) {
-        final byte[] pageKey = data.add(pageNumber).pack();
-        return pageKey;
-    }
 
     static int decodeInt(final byte[] v) {
         return (((v[0] & 0xff) << 24) | ((v[1] & 0xff) << 16) | ((v[2] & 0xff) << 8) | (v[3] & 0xff));
@@ -65,15 +57,6 @@ final class FDBUtil {
 
     static long posToPage(final long pos) {
         return pos / PAGE_SIZE;
-    }
-
-    static void setPage(final Database db, final Tuple data, final long pageNumber, final byte[] page) {
-        final byte[] pageKey = pageKey(data, pageNumber);
-
-        db.run(txn -> {
-            txn.set(pageKey, page);
-            return null;
-        });
     }
 
 }
