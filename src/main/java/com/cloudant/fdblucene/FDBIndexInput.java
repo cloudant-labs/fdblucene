@@ -21,6 +21,7 @@ public final class FDBIndexInput extends IndexInput {
     private long pointer;
 
     private final CacheAccess<String, byte[]> pageCache = JCS.getInstance("fdb");
+    private final String pageNamePrefix;
 
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
             final long offset, final long length) {
@@ -32,6 +33,7 @@ public final class FDBIndexInput extends IndexInput {
         this.length = length;
         page = null;
         pointer = 0L;
+        pageNamePrefix = "/" + String.join("/", subdir.getPath());
     }
 
     @Override
@@ -102,14 +104,14 @@ public final class FDBIndexInput extends IndexInput {
     private void loadPageIfNull() {
         if (page == null) {
             final long currentPage = currentPage();
-            page = pageCache.get(currentPageName());
+            page = pageCache.get(pageName(currentPage));
             if (page == null) {
                 final byte[] key = pageKey(currentPage);
                 page = txc.read(txn -> {
                     txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
                     return txn.get(key).join();
                 });
-                pageCache.put(currentPageName(), page);
+                pageCache.put(pageName(currentPage), page);
             }
         }
     }
@@ -122,8 +124,8 @@ public final class FDBIndexInput extends IndexInput {
         return subdir.pack(pageNumber);
     }
 
-    private String currentPageName() {
-        return String.format("%s-%d", toString(), currentPage());
+    private String pageName(final long pageNumber) {
+        return String.format("%s@%d", pageNamePrefix, pageNumber);
     }
 
 }
