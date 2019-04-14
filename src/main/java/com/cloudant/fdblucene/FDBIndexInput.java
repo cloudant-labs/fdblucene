@@ -2,6 +2,7 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.util.UUID;
 
 import org.apache.commons.jcs.JCS;
 import org.apache.commons.jcs.access.CacheAccess;
@@ -20,8 +21,7 @@ public final class FDBIndexInput extends IndexInput {
     private byte[] page;
     private long pointer;
 
-    private final CacheAccess<String, byte[]> pageCache = JCS.getInstance("fdb");
-    private final String pageNamePrefix;
+    private final CacheAccess<String, byte[]> pageCache = JCS.getInstance(UUID.randomUUID().toString());
 
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
             final long offset, final long length) {
@@ -33,7 +33,6 @@ public final class FDBIndexInput extends IndexInput {
         this.length = length;
         page = null;
         pointer = 0L;
-        pageNamePrefix = "/" + String.join("/", subdir.getPath());
     }
 
     @Override
@@ -125,7 +124,7 @@ public final class FDBIndexInput extends IndexInput {
     }
 
     private String pageName(final long pageNumber) {
-        return String.format("%s@%d", pageNamePrefix, pageNumber);
+        return Long.toHexString(pageNumber);
     }
 
 }
