@@ -129,7 +129,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private void setReadVersion(final Transaction txn) {
         final long now = System.currentTimeMillis();
         final long readVersionAge = now - this.readVersionAt;
-        if (this.readVersion == -1L || readVersionAge > 150) {
+        if (this.readVersion == -1L || readVersionAge > 4000) {
             this.readVersion = txn.getReadVersion().join();
             this.readVersionAt = now;
         } else {
