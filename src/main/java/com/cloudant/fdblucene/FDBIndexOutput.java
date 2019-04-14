@@ -13,9 +13,38 @@ import com.apple.foundationdb.directory.DirectorySubspace;
 
 public final class FDBIndexOutput extends IndexOutput {
 
+    private static void flushTxnBuffer(
+            final DirectorySubspace subdir,
+            final Transaction txn,
+            final byte[] txnBuffer,
+            final int txnBufferOffset,
+            final long pointer) {
+        final byte[] fullPage = FDBUtil.newPage();
+        for (int i = 0; i < txnBufferOffset; i += FDBUtil.PAGE_SIZE) {
+            final long pos = pointer - txnBufferOffset + i;
+            final byte[] key = pageKey(subdir, pos);
+            final int flushSize = Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i);
+            final byte[] bufToFlush;
+            if (flushSize == FDBUtil.PAGE_SIZE) {
+                bufToFlush = fullPage;
+            } else {
+                bufToFlush = new byte[flushSize];
+            }
+            System.arraycopy(txnBuffer, i, bufToFlush, 0, flushSize);
+            txn.options().setNextWriteNoWriteConflictRange();
+            txn.set(key, bufToFlush);
+        }
+    }
+
+    private static byte[] pageKey(final DirectorySubspace subdir, final long pos) {
+        final long currentPage = FDBUtil.posToPage(pos);
+        return subdir.pack(currentPage);
+    }
+
     private final TransactionContext txc;
     private final DirectorySubspace subdir;
-    private final byte[] txnBuffer;
+    private byte[] txnBuffer;
+
     private int txnBufferOffset;
     private final CRC32 crc;
 
@@ -23,6 +52,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private long pointer;
 
     private long readVersion;
+
     private long readVersionAt;
 
     public FDBIndexOutput(final String resourceDescription, final String name, final TransactionContext txc,
@@ -44,7 +74,7 @@ public final class FDBIndexOutput extends IndexOutput {
         txc.run(txn -> {
             setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,close,%d", getName(), pointer));
-            flushTxnBuffer(txn);
+            flushTxnBuffer(subdir, txn, txnBuffer, txnBufferOffset, pointer);
             txn.options().setNextWriteNoWriteConflictRange();
             txn.set(subdir.pack("length"), FDBUtil.encodeLong(pointer));
             return null;
@@ -86,52 +116,35 @@ public final class FDBIndexOutput extends IndexOutput {
         crc.update(b, offset, length);
     }
 
+    private void flushTxnBuffer() {
+        lastFlushFuture.join();
+
+        final byte[] txnBuffer = this.txnBuffer;
+        final int txnBufferOffset = this.txnBufferOffset;
+
+        this.txnBuffer = FDBUtil.newTxnBuffer();
+        this.txnBufferOffset = 0;
+
+        lastFlushFuture = txc.runAsync(txn -> {
+            setReadVersion(txn);
+            txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
+            flushTxnBuffer(subdir, txn, txnBuffer, txnBufferOffset, pointer);
+            return AsyncUtil.DONE;
+        });
+    }
+
     private void flushTxnBufferIfFull() {
         if (txnBufferOffset == txnBuffer.length) {
             flushTxnBuffer();
         }
     }
 
-    private void flushTxnBuffer() {
-        lastFlushFuture.join();
-        lastFlushFuture = txc.runAsync(txn -> {
-            setReadVersion(txn);
-            txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
-            flushTxnBuffer(txn);
-            return AsyncUtil.DONE;
-        });
-    }
-
-    private void flushTxnBuffer(final Transaction txn) {
-        final byte[] fullPage = FDBUtil.newPage();
-        for (int i = 0; i < txnBufferOffset; i += FDBUtil.PAGE_SIZE) {
-            final long pos = this.pointer - txnBufferOffset + i;
-            final byte[] key = pageKey(pos);
-            final int flushSize = Math.min(FDBUtil.PAGE_SIZE, txnBufferOffset - i);
-            final byte[] bufToFlush;
-            if (flushSize == FDBUtil.PAGE_SIZE) {
-                bufToFlush = fullPage;
-            } else {
-                bufToFlush = new byte[flushSize];
-            }
-            System.arraycopy(txnBuffer, i, bufToFlush, 0, flushSize);
-            txn.options().setNextWriteNoWriteConflictRange();
-            txn.set(key, bufToFlush);
-        }
-        txnBufferOffset = 0;
-    }
-
-    private byte[] pageKey(final long pos) {
-        final long currentPage = FDBUtil.posToPage(pos);
-        return subdir.pack(currentPage);
-    }
-
     private void setReadVersion(final Transaction txn) {
         final long now = System.currentTimeMillis();
-        final long readVersionAge = now - this.readVersionAt;
-        if (this.readVersion == -1L || readVersionAge > 4000) {
-            this.readVersion = txn.getReadVersion().join();
-            this.readVersionAt = now;
+        final long readVersionAge = now - readVersionAt;
+        if (readVersion == -1L || readVersionAge > 4000) {
+            readVersion = txn.getReadVersion().join();
+            readVersionAt = now;
         } else {
             txn.setReadVersion(readVersion);
         }
