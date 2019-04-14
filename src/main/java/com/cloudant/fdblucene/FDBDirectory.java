@@ -185,4 +185,9 @@ public final class FDBDirectory extends Directory {
         return Collections.singletonList(name);
     }
 
+    @Override
+    public String toString() {
+        return String.format("FDBDirectory(path=/%s)", String.join("/", dir.getPath()));
+    }
+
 }
