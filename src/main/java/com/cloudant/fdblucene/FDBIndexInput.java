@@ -37,7 +37,7 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void close() throws IOException {
-        // empty.
+        pageCache.clear();
     }
 
     @Override
