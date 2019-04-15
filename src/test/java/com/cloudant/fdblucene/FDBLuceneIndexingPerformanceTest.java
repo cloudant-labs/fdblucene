@@ -28,7 +28,9 @@ import com.apple.foundationdb.FDB;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
+public class FDBLuceneIndexingPerformanceTest {
+
+    private final Random random = new Random();
 
     @Test
     public void test() throws Exception {
@@ -58,10 +60,10 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
         config.setUseCompoundFile(false);
         config.setCodec(new Lucene80Codec());
 
-        try (final LineFileDocs docs = new LineFileDocs(random(), LuceneTestCase.DEFAULT_LINE_DOCS_FILE);
+        try (final LineFileDocs docs = new LineFileDocs(random, LuceneTestCase.DEFAULT_LINE_DOCS_FILE);
                 final IndexWriter writer = new IndexWriter(dir, config)) {
 
-            final long maxDocCount = 10000;
+            final long maxDocCount = 100000;
             final long start = System.currentTimeMillis();
             long docCount = 0;
             Document doc = docs.nextDoc();
@@ -85,9 +87,9 @@ public class FDBLuceneIndexingPerformanceTest extends LuceneTestCase {
     private void runSearches(final Directory dir) throws IOException {
         final IndexReader reader = DirectoryReader.open(dir);
         final IndexSearcher searcher = new IndexSearcher(reader);
-        final long maxQueryCount = 5000;
+        final long maxQueryCount = 50000;
         long queryCount = 0;
-        final Random random = random();
+
         final long start = System.currentTimeMillis();
         for (int i = 0; i < maxQueryCount; i++) {
             searcher.search(new TermQuery(new Term("_id", "doc-" + random.nextInt(1000))),  10);
