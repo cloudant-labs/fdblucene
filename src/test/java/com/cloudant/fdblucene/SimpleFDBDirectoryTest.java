@@ -2,6 +2,7 @@ package com.cloudant.fdblucene;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 
@@ -101,15 +102,8 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void indexSomething() throws Exception {
-        final IndexWriterConfig config = new IndexWriterConfig();
-        config.setUseCompoundFile(false);
-        config.setCodec(new Lucene80Codec());
-
-        try (final IndexWriter writer = new IndexWriter(dir, config)) {
-            final Document doc = new Document();
-            doc.add(new TextField("foo", "hello everybody", Store.NO));
-            doc.add(new StringField("_id", "doc1", Store.YES));
-            writer.addDocument(doc);
+        try (final IndexWriter writer = new IndexWriter(dir, indexWriterConfig())) {
+            addDocument(writer, "doc1");
             writer.commit();
         }
 
@@ -121,6 +115,45 @@ public class SimpleFDBDirectoryTest {
             final Document doc = reader.document(topDocs.scoreDocs[0].doc);
             assertEquals("doc1", doc.get("_id"));
         }
+    }
+
+    @Test
+    public void addIndexes() throws Exception {
+        Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        IndexWriter writer1 = new IndexWriter(dir1, indexWriterConfig());
+        addDocument(writer1, "foo1");
+        writer1.commit();
+        writer1.close();
+
+        Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"));
+        IndexWriter writer2 = new IndexWriter(dir2, indexWriterConfig());
+        addDocument(writer2, "foo2");
+        writer2.commit();
+        writer2.close();
+
+        Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"));
+        IndexWriter writer3 = new IndexWriter(dir3, indexWriterConfig());
+        writer3.addIndexes(dir1, dir2);
+        writer3.commit();
+        writer3.close();
+
+        try (final IndexReader reader = DirectoryReader.open(dir3)) {
+            assertEquals(2, reader.numDocs());
+        }
+    }
+
+    private void addDocument(final IndexWriter writer, final String docId) throws IOException {
+        final Document doc = new Document();
+        doc.add(new TextField("foo", "hello everybody", Store.NO));
+        doc.add(new StringField("_id", docId, Store.YES));
+        writer.addDocument(doc);
+    }
+
+    private IndexWriterConfig indexWriterConfig() {
+        final IndexWriterConfig config = new IndexWriterConfig();
+        config.setUseCompoundFile(false);
+        config.setCodec(new Lucene80Codec());
+        return config;
     }
 
 }
