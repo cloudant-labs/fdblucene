@@ -28,7 +28,13 @@ public final class FDBDirectory extends Directory {
 
     public static FDBDirectory open(final Database db, final Path path) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
-        return new FDBDirectory(db, dirLayer.createOrOpen(db, pathAsList(path)).join());
+        return new FDBDirectory(db, dirLayer.createOrOpen(db, pathAsList(path)).join(),
+                FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    }
+
+    public static FDBDirectory open(final Database db, final Path path, final int pageSize, final int txnSize) {
+        final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
+        return new FDBDirectory(db, dirLayer.createOrOpen(db, pathAsList(path)).join(), pageSize, txnSize);
     }
 
     private static List<String> pathAsList(final Path path) {
@@ -42,11 +48,16 @@ public final class FDBDirectory extends Directory {
     private final TransactionContext txc;
     private final DirectorySubspace dir;
     private boolean closed;
+    private final int pageSize;
+    private final int txnSize;
 
-    private FDBDirectory(final TransactionContext txc, final DirectorySubspace dir) {
+    private FDBDirectory(final TransactionContext txc, final DirectorySubspace dir, final int pageSize,
+                         final int txnSize) {
         this.txc = txc;
         this.dir = dir;
         this.closed = false;
+        this.pageSize = getOrSetPageSize(txc, dir, pageSize);
+        this.txnSize = txnSize;
     }
 
     @Override
@@ -66,7 +77,7 @@ public final class FDBDirectory extends Directory {
                 final DirectorySubspace result = dir.create(txn, asList(name)).join();
                 txn.set(result.pack("length"), FDBUtil.encodeLong(0L));
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + result + "\")";
-                return new FDBIndexOutput(resourceDescription, name, txc, result);
+                return new FDBIndexOutput(resourceDescription, name, txc, result, pageSize, txnSize);
 
             });
         } catch (final CompletionException e) {
@@ -99,7 +110,7 @@ public final class FDBDirectory extends Directory {
         final List<String> path = subdir.getPath();
         final String name = path.get(path.size() - 1);
         final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
-        return new FDBIndexOutput(resourceDescription, name, txc, subdir);
+        return new FDBIndexOutput(resourceDescription, name, txc, subdir, pageSize, txnSize);
     }
 
     @Override
@@ -152,7 +163,7 @@ public final class FDBDirectory extends Directory {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 final long length = FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
-                return new FDBIndexInput(resourceDescription, txc, subdir, name, 0L, length);
+                return new FDBIndexInput(resourceDescription, txc, subdir, name, 0L, length, pageSize);
             });
         } catch (final CompletionException e) {
             if (e.getCause() instanceof NoSuchDirectoryException) {
@@ -183,6 +194,18 @@ public final class FDBDirectory extends Directory {
 
     private List<String> asList(final String name) {
         return Collections.singletonList(name);
+    }
+
+    private int getOrSetPageSize(final TransactionContext txc, final DirectorySubspace dir, final int pageSize) {
+        return txc.run(txn -> {
+            byte[] pageSizeInFDB = txn.get(dir.pack("pagesize")).join();
+            if (pageSizeInFDB == null) {
+                txn.set(dir.pack("pagesize"), FDBUtil.encodeInt(pageSize));
+                return pageSize;
+            } else {
+                return FDBUtil.decodeInt(pageSizeInFDB);
+            }
+        });
     }
 
     @Override

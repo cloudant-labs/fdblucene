@@ -6,6 +6,9 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 
+import java.util.Arrays;
+import java.util.Collection;
+
 import org.apache.lucene.codecs.lucene80.Lucene80Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
@@ -28,13 +31,25 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.FDB;
 
+@RunWith(Parameterized.class)
 public class SimpleFDBDirectoryTest {
 
     private static Database DB;
+
+    @Parameters
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][]{
+                {1_000, 100_000},
+                {10_000, 1_000_000},
+                {100_000, 1_000_000}});
+    }
 
     @BeforeClass
     public static void setupFDB() {
@@ -43,11 +58,18 @@ public class SimpleFDBDirectoryTest {
     }
 
     private Directory dir;
+    private final int pageSize;
+    private final int txnSize;
+
+    public SimpleFDBDirectoryTest(final int pageSize, final int txnSize) {
+        this.pageSize = pageSize;
+        this.txnSize = txnSize;
+    }
 
     @Before
     public void setupDir() throws Exception {
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
-        dir = FDBDirectory.open(DB, path);
+        dir = FDBDirectory.open(DB, path, pageSize, txnSize);
         cleanupDir();
     }
 

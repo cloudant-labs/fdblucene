@@ -30,17 +30,17 @@ public class BoundaryTest {
         return Arrays.asList(
                 0,
                 1,
-                FDBUtil.PAGE_SIZE - 2,
-                FDBUtil.PAGE_SIZE - 1,
-                FDBUtil.PAGE_SIZE,
-                FDBUtil.PAGE_SIZE + 1,
-                FDBUtil.PAGE_SIZE + 2,
+                FDBUtil.DEFAULT_PAGE_SIZE - 2,
+                FDBUtil.DEFAULT_PAGE_SIZE - 1,
+                FDBUtil.DEFAULT_PAGE_SIZE,
+                FDBUtil.DEFAULT_PAGE_SIZE + 1,
+                FDBUtil.DEFAULT_PAGE_SIZE + 2,
 
-                (2 * FDBUtil.PAGE_SIZE) - 2,
-                (2 * FDBUtil.PAGE_SIZE) - 1,
-                (2 * FDBUtil.PAGE_SIZE),
-                (2 * FDBUtil.PAGE_SIZE) + 1,
-                (2 * FDBUtil.PAGE_SIZE) + 2);
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 2,
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 1,
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE),
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE) + 1,
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE) + 2);
     }
 
     @BeforeClass

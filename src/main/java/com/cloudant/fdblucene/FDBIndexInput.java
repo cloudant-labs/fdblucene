@@ -20,11 +20,12 @@ public final class FDBIndexInput extends IndexInput {
     private final long length;
     private byte[] page;
     private long pointer;
+    private final int pageSize;
 
     private final CacheAccess<String, byte[]> pageCache = JCS.getInstance(UUID.randomUUID().toString());
 
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
-            final long offset, final long length) {
+            final long offset, final long length, final int pageSize) {
         super(resourceDescription);
         this.txc = txc;
         this.subdir = subdir;
@@ -33,6 +34,7 @@ public final class FDBIndexInput extends IndexInput {
         this.length = length;
         page = null;
         pointer = 0L;
+        this.pageSize = pageSize;
     }
 
     @Override
@@ -57,7 +59,7 @@ public final class FDBIndexInput extends IndexInput {
         }
 
         loadPageIfNull();
-        byte result = page[FDBUtil.posToOffset(offset + pointer)];
+        byte result = page[FDBUtil.posToOffset(offset + pointer, pageSize)];
         seek(this.pointer + 1);
         return result;
     }
@@ -72,8 +74,9 @@ public final class FDBIndexInput extends IndexInput {
         int readLength = length;
         while (readLength > 0) {
             loadPageIfNull();
-            final int bytesToRead = Math.min(readLength, page.length - FDBUtil.posToOffset(this.offset + this.pointer));
-            System.arraycopy(page, FDBUtil.posToOffset(this.offset + this.pointer), b, readOffset, bytesToRead);
+            final int bytesToRead = Math.min(readLength,
+                    page.length - FDBUtil.posToOffset(this.offset + this.pointer, this.pageSize));
+            System.arraycopy(page, FDBUtil.posToOffset(this.offset + this.pointer, this.pageSize), b, readOffset, bytesToRead);
             readOffset += bytesToRead;
             readLength -= bytesToRead;
             seek(pointer + bytesToRead);
@@ -86,7 +89,7 @@ public final class FDBIndexInput extends IndexInput {
             throw new EOFException("Attempt to seek past end of file");
         }
 
-        if (FDBUtil.posToPage(this.offset + pointer) != FDBUtil.posToPage(this.offset + pos)) {
+        if (FDBUtil.posToPage(this.offset + pointer, pageSize) != FDBUtil.posToPage(this.offset + pos, this.pageSize)) {
             page = null;
         }
         pointer = pos;
@@ -97,7 +100,8 @@ public final class FDBIndexInput extends IndexInput {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
-        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name, this.offset + offset, length);
+        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name,
+                this.offset + offset, length, pageSize);
     }
 
     private void loadPageIfNull() {
@@ -116,7 +120,7 @@ public final class FDBIndexInput extends IndexInput {
     }
 
     private long currentPage() {
-        return FDBUtil.posToPage(offset + pointer);
+        return FDBUtil.posToPage(offset + pointer, pageSize);
     }
 
     private byte[] pageKey(final long pageNumber) {
