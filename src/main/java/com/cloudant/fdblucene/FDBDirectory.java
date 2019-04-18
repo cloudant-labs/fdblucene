@@ -27,9 +27,7 @@ import com.apple.foundationdb.directory.NoSuchDirectoryException;
 public final class FDBDirectory extends Directory {
 
     public static FDBDirectory open(final Database db, final Path path) {
-        final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
-        return new FDBDirectory(db, dirLayer.createOrOpen(db, pathAsList(path)).join(),
-                FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+        return open(db, path, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
     public static FDBDirectory open(final Database db, final Path path, final int pageSize, final int txnSize) {
