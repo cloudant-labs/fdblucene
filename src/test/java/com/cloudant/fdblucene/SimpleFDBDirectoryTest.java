@@ -78,6 +78,10 @@ public class SimpleFDBDirectoryTest {
         if (dir == null) {
             return;
         }
+        cleanupDir(dir);
+    }
+
+    private void cleanupDir(final Directory dir) throws Exception {
         for (final String name : dir.listAll()) {
             dir.deleteFile(name);
         }
@@ -142,18 +146,21 @@ public class SimpleFDBDirectoryTest {
     @Test
     public void addIndexes() throws Exception {
         Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        cleanupDir(dir1);
         IndexWriter writer1 = new IndexWriter(dir1, indexWriterConfig());
         addDocument(writer1, "foo1");
         writer1.commit();
         writer1.close();
 
         Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"));
+        cleanupDir(dir2);
         IndexWriter writer2 = new IndexWriter(dir2, indexWriterConfig());
         addDocument(writer2, "foo2");
         writer2.commit();
         writer2.close();
 
         Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"));
+        cleanupDir(dir3);
         IndexWriter writer3 = new IndexWriter(dir3, indexWriterConfig());
         writer3.addIndexes(dir1, dir2);
         writer3.commit();
