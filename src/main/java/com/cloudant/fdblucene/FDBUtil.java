@@ -7,9 +7,9 @@ final class FDBUtil {
 
     public static final Random RANDOM = new SecureRandom();
 
-    static final int PAGE_SIZE = 100_000;
+    static final int DEFAULT_PAGE_SIZE = 100_000;
 
-    static final int TXN_SIZE = 1_000_000;
+    static final int DEFAULT_TXN_SIZE = 1_000_000;
 
     static int decodeInt(final byte[] v) {
         return (((v[0] & 0xff) << 24) | ((v[1] & 0xff) << 16) | ((v[2] & 0xff) << 8) | (v[3] & 0xff));
@@ -43,20 +43,12 @@ final class FDBUtil {
         return result;
     }
 
-    static byte[] newPage() {
-        return new byte[PAGE_SIZE];
+    static int posToOffset(final long pos, final int pageSize) {
+        return (int) (pos % pageSize);
     }
 
-    static byte[] newTxnBuffer() {
-        return new byte[TXN_SIZE];
-    }
-
-    static int posToOffset(final long pos) {
-        return (int) (pos % PAGE_SIZE);
-    }
-
-    static long posToPage(final long pos) {
-        return pos / PAGE_SIZE;
+    static long posToPage(final long pos, final int pageSize) {
+        return pos / pageSize;
     }
 
 }
