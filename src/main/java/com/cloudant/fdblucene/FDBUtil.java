@@ -2,6 +2,9 @@ package com.cloudant.fdblucene;
 
 import java.security.SecureRandom;
 import java.util.Random;
+import java.util.UUID;
+
+import com.apple.foundationdb.tuple.Tuple;
 
 final class FDBUtil {
 
@@ -41,6 +44,15 @@ final class FDBUtil {
         result[6] = (byte) (0xff & (v >> 8));
         result[7] = (byte) (0xff & v);
         return result;
+    }
+
+    static byte[] encodeUUID(final UUID v) {
+        return Tuple.from(v.getMostSignificantBits(), v.getLeastSignificantBits()).pack();
+    }
+
+    static UUID decodeUUID(final byte[] v) {
+        final Tuple t = Tuple.fromBytes(v);
+        return new UUID(t.getLong(0), t.getLong(1));
     }
 
     static int posToOffset(final long pos, final int pageSize) {

@@ -2,10 +2,9 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.UUID;
 
 import org.apache.commons.jcs.JCS;
-import org.apache.commons.jcs.access.CacheAccess;
+import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.IndexInput;
 
 import com.apple.foundationdb.TransactionContext;
@@ -27,10 +26,11 @@ public final class FDBIndexInput extends IndexInput {
     private long pointer;
     private final int pageSize;
 
-    private final CacheAccess<String, byte[]> pageCache = JCS.getInstance(UUID.randomUUID().toString());
+    private final GroupCacheAccess<Long, byte[]> pageCache;
 
-    FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
-            final long offset, final long length, final int pageSize) {
+    FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir,
+            final String name, final long offset, final long length, final int pageSize,
+            final GroupCacheAccess<Long, byte[]> pageCache) {
         super(resourceDescription);
         this.txc = txc;
         this.subdir = subdir;
@@ -40,11 +40,12 @@ public final class FDBIndexInput extends IndexInput {
         page = null;
         pointer = 0L;
         this.pageSize = pageSize;
+        this.pageCache = pageCache;
     }
 
     @Override
     public void close() throws IOException {
-        pageCache.clear();
+        // empty.
     }
 
     @Override
@@ -105,21 +106,21 @@ public final class FDBIndexInput extends IndexInput {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
-        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name,
-                this.offset + offset, length, pageSize);
+        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name, this.offset + offset,
+                length, pageSize, pageCache);
     }
 
     private void loadPageIfNull() {
         if (page == null) {
             final long currentPage = currentPage();
-            page = pageCache.get(pageName(currentPage));
+            page = pageCache.getFromGroup(currentPage, name);
             if (page == null) {
                 final byte[] key = pageKey(currentPage);
                 page = txc.read(txn -> {
                     txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
                     return txn.get(key).join();
                 });
-                pageCache.put(pageName(currentPage), page);
+                pageCache.putInGroup(currentPage, name, page);
             }
         }
     }
@@ -130,10 +131,6 @@ public final class FDBIndexInput extends IndexInput {
 
     private byte[] pageKey(final long pageNumber) {
         return subdir.pack(pageNumber);
-    }
-
-    private String pageName(final long pageNumber) {
-        return Long.toHexString(pageNumber);
     }
 
 }
