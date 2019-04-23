@@ -11,6 +11,11 @@ import org.apache.lucene.store.IndexInput;
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.directory.DirectorySubspace;
 
+/**
+ * A concrete implementation of {@link IndexInput} that reads {@code pages} from
+ * FoundationDB. These pages are cached using {@link JCS} using an ephemeral key
+ * that is valid only until {@link #close()} is called.
+ */
 public final class FDBIndexInput extends IndexInput {
 
     private final TransactionContext txc;
