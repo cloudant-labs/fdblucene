@@ -32,7 +32,13 @@ public final class FDBDirectory extends Directory {
 
     public static FDBDirectory open(final Database db, final Path path, final int pageSize, final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
-        return new FDBDirectory(db, dirLayer.createOrOpen(db, pathAsList(path)).join(), pageSize, txnSize);
+        final DirectorySubspace dir = dirLayer.createOrOpen(db, pathAsList(path)).join();
+        return open(db, dir, pageSize, txnSize);
+    }
+
+    public static FDBDirectory open(final TransactionContext txc, final DirectorySubspace dir, final int pageSize,
+            final int txnSize) {
+        return new FDBDirectory(txc, dir, pageSize, txnSize);
     }
 
     private static List<String> pathAsList(final Path path) {
@@ -50,7 +56,7 @@ public final class FDBDirectory extends Directory {
     private final int txnSize;
 
     private FDBDirectory(final TransactionContext txc, final DirectorySubspace dir, final int pageSize,
-                         final int txnSize) {
+            final int txnSize) {
         this.txc = txc;
         this.dir = dir;
         this.closed = false;
