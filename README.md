@@ -35,7 +35,9 @@ notion of a Lucene Directory and the individual files within it. Each
 file is itself a FoundationDB Directory consisting of one metadata
 item that holds the files length and zero, one or more data
 `pages`. Each page has a binary value of whatever Lucene wrote to the
-file and the key is simply the page number (counting from zero).
+file and the key is simply the page number (counting from zero). This
+is essentially the https://apple.github.io/foundationdb/largeval.html
+pattern.
 
 Lucene creates empty files, fills them with data by appending, and
 then closes them. The files are never updated again. They are
