@@ -3,9 +3,6 @@
 FDBLucene is a new project to store Lucene indexes into FoundationDB
 while providing high performance for both indexing and searching.
 
-An introduction to Lucene is necessary to ground the decisions
-made in FDBLucene's design:
-
 Lucene expects to write to disk (via a file system) and uses an
 inverted index for this reason. To balance the optimal on-disk format
 with the need to efficiently update an index, Lucene creates multiple
