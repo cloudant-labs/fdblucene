@@ -30,6 +30,13 @@ meaning to Lucene. We can therefore buffer as much data as we like to
 form an optimal transaction size. In contrast, the `rename` method
 is atomic.
 
+FDBLucene uses FoundationDB's Directory Layer to implement both the
+notion of a Lucene Directory and the individual files within it. Each
+file is itself a FoundationDB Directory consisting of one metadata
+item that holds the files length and zero, one or more data
+`pages`. Each page has a binary value of whatever Lucene wrote to the
+file and the key is simply the page number (counting from zero).
+
 Lucene creates empty files, fills them with data by appending, and
 then closes them. The files are never updated again. They are
 therefore highly cacheable. FDBLucene exploits this property by
