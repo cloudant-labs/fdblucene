@@ -24,19 +24,79 @@ import com.apple.foundationdb.directory.DirectoryLayer;
 import com.apple.foundationdb.directory.DirectorySubspace;
 import com.apple.foundationdb.directory.NoSuchDirectoryException;
 
+/**
+ * A concrete implementation of {@link Directory} that reads and writes all
+ * index data into a FoundationDB {@link Database}.
+ *
+ */
 public final class FDBDirectory extends Directory {
 
-    public static FDBDirectory open(final Database db, final Path path) {
-        return open(db, path, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    /**
+     * Opens a Directory (or creates an empty one if there is no existing directory)
+     * at the provided {@code path}.
+     *
+     * @param txc  The {@link TransactionContext} that will be used for all
+     *             transactions. This is typically a {@link Database}.
+     * @param path The (virtual) path where this directory is located. This option
+     *             is provided for compatibility with the Lucene test framework. No
+     *             data will be written to this path of the filesystem.
+     * @return an instance of FDBDirectory
+     */
+    public static FDBDirectory open(final TransactionContext txc, final Path path) {
+        return open(txc, path, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
-    public static FDBDirectory open(final Database db, final Path path, final int pageSize, final int txnSize) {
+    /**
+     * Opens a Directory (or creates an empty one if there is no existing directory)
+     * at the provided {@code path}.
+     *
+     * @param txc      The {@link TransactionContext} that will be used for all
+     *                 transactions. This is typically a {@link Database}.
+     * @param path     The (virtual) path where this directory is located. This
+     *                 option is provided for compatibility with the Lucene test
+     *                 framework. No data will be written to this path of the
+     *                 filesystem.
+     * @param pageSize The size of the value stored in FoundationDB. Must be less
+     *                 that {@code txnSize}. This value is ignored if the directory
+     *                 already exists.
+     * @param txnSize  The maximum size of the transaction FDBDirectory will make
+     *                 when writing to FoundationDB. Must be at least as large as
+     *                 {@code pageSize}.
+     * @return an instance of FDBDirectory
+     * @throws IllegalArgumentException if txnSize is smaller than pageSize.
+     */
+    public static FDBDirectory open(
+            final TransactionContext txc,
+            final Path path,
+            final int pageSize,
+            final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
-        final DirectorySubspace dir = dirLayer.createOrOpen(db, pathAsList(path)).join();
-        return open(db, dir, pageSize, txnSize);
+        final DirectorySubspace dir = dirLayer.createOrOpen(txc, pathAsList(path)).join();
+        return open(txc, dir, pageSize, txnSize);
     }
 
-    public static FDBDirectory open(final TransactionContext txc, final DirectorySubspace dir, final int pageSize,
+    /**
+     * Opens a Directory (or creates an empty one if there is no existing directory)
+     * at the provided {@code path}.
+     *
+     * @param txc      The {@link TransactionContext} that will be used for all
+     *                 transactions. This is typically a {@link Database}.
+     * @param dir      The {@link DirectorySubspace} to create all key-value entries
+     *                 under. This is useful if using Lucene indexes in a wider
+     *                 context.
+     * @param pageSize The size of the value stored in FoundationDB. Must be less
+     *                 that {@code txnSize}. This value is ignored if the directory
+     *                 already exists.
+     * @param txnSize  The maximum size of the transaction FDBDirectory will make
+     *                 when writing to FoundationDB. Must be at least as large as
+     *                 {@code pageSize}.
+     * @return an instance of FDBDirectory
+     * @throws IllegalArgumentException if txnSize is smaller than pageSize.
+     */
+    public static FDBDirectory open(
+            final TransactionContext txc,
+            final DirectorySubspace dir,
+            final int pageSize,
             final int txnSize) {
         return new FDBDirectory(txc, dir, pageSize, txnSize);
     }
@@ -73,6 +133,13 @@ public final class FDBDirectory extends Directory {
         closed = true;
     }
 
+    /**
+     * Creates a new {@link FDBIndexOutput} instance.
+     *
+     * @param name    the name of the output file.
+     * @param context this parameter is ignored. It is safe to pass {@code null} in
+     *                tests.
+     */
     @Override
     public IndexOutput createOutput(final String name, final IOContext context) throws IOException {
         if (closed) {
@@ -96,6 +163,12 @@ public final class FDBDirectory extends Directory {
         }
     }
 
+    /**
+     * Creates a new {@link FDBIndexOutput} instance.
+     *
+     * @param context this parameter is ignored. It is safe to pass {@code null} in
+     *                tests.
+     */
     @Override
     public IndexOutput createTempOutput(final String prefix, final String suffix, final IOContext context)
             throws IOException {
@@ -159,6 +232,12 @@ public final class FDBDirectory extends Directory {
         return FDBLock.obtain(txc, dir, name);
     }
 
+    /**
+     * Creates a new {@link FDBIndexInput} instance.
+     *
+     * @param context this parameter is ignored. It is safe to pass {@code null} in
+     *                tests.
+     */
     @Override
     public IndexInput openInput(final String name, final IOContext context) throws IOException {
         if (closed) {
@@ -181,6 +260,9 @@ public final class FDBDirectory extends Directory {
         }
     }
 
+    /**
+     * Atomically renames a file using {@link DirectorySubspace#move(TransactionContext, List, List)} method.
+     */
     @Override
     public void rename(final String source, final String dest) throws IOException {
         txc.run(txn -> {
@@ -190,11 +272,17 @@ public final class FDBDirectory extends Directory {
         });
     }
 
+    /**
+     * this method's implementation is empty.
+     */
     @Override
     public void sync(final Collection<String> names) throws IOException {
         // intentionally empty
     }
 
+    /**
+     * this method's implementation is empty.
+     */
     @Override
     public void syncMetaData() throws IOException {
         // intentionally empty
