@@ -62,6 +62,10 @@ public final class FDBDirectory extends Directory {
         this.closed = false;
         this.pageSize = getOrSetPageSize(txc, dir, pageSize);
         this.txnSize = txnSize;
+
+        if (this.txnSize < this.pageSize) {
+            throw new IllegalArgumentException("txnSize cannot be smaller than pageSize");
+        }
     }
 
     @Override
