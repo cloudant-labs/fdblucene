@@ -29,7 +29,7 @@ public final class FDBIndexInput extends IndexInput {
 
     private final CacheAccess<String, byte[]> pageCache = JCS.getInstance(UUID.randomUUID().toString());
 
-    public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
+    FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir, final String name,
             final long offset, final long length, final int pageSize) {
         super(resourceDescription);
         this.txc = txc;
