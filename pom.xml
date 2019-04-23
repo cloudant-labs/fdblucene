@@ -93,6 +93,12 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+          <links>
+            <link>http://lucene.apache.org/core/8_0_0/core/</link>
+            <link>https://apple.github.io/foundationdb/javadoc/</link>
+          </links>
+        </configuration>
       </plugin>
     </plugins>
   </build>
