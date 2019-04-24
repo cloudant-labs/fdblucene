@@ -42,5 +42,6 @@ therefore highly cacheable. FDBLucene exploits this property by
 caching every `page` that it reads from any file. The behaviour,
 and capacity, of that cache is configurable by the user as FDBLucene
 uses Apache JCS (http://commons.apache.org/jcs/). The cache for an
-individual file is only valid while it is open in order to avoid any
-cache coherency issues if an index is deleted and recreated.
+individual file is only valid until deleted or until the enclosing
+Directory is closed in order to avoid any cache coherency issues if
+an index is deleted and recreated.
