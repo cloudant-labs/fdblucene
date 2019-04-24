@@ -19,7 +19,7 @@ index. This allows Lucene to build files in the index without making
 them immediately visible. The segments file is itself updated
 atomically.
 
-These design decisions with Lucene guide us to where, and whether, to
+These design decisions within Lucene guide us to where, and whether, to
 apply FDB transactional semantics. When writing to a new file, for
 example, we have no need to put a transaction around the data we're
 writing. FoundationDB, of course, requires one, but it has no semantic
