@@ -8,8 +8,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 
+import org.apache.commons.jcs.JCS;
+import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -115,6 +118,9 @@ public final class FDBDirectory extends Directory {
     private final int pageSize;
     private final int txnSize;
 
+    private final UUID uuid;
+    private final GroupCacheAccess<Long, byte[]> pageCache;
+
     private FDBDirectory(final TransactionContext txc, final DirectorySubspace dir, final int pageSize,
             final int txnSize) {
         this.txc = txc;
@@ -126,10 +132,14 @@ public final class FDBDirectory extends Directory {
         if (this.txnSize < this.pageSize) {
             throw new IllegalArgumentException("txnSize cannot be smaller than pageSize");
         }
+
+        this.uuid = UUID.randomUUID();
+        this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
     @Override
     public void close() throws IOException {
+        pageCache.clear();
         closed = true;
     }
 
@@ -197,7 +207,9 @@ public final class FDBDirectory extends Directory {
     @Override
     public void deleteFile(final String name) throws IOException {
         final boolean deleted = dir.removeIfExists(txc, asList(name)).join();
-        if (!deleted) {
+        if (deleted) {
+            pageCache.invalidateGroup(name);
+        } else {
             throw new FileNotFoundException(name + " does not exist");
         }
     }
@@ -250,7 +262,7 @@ public final class FDBDirectory extends Directory {
                 final DirectorySubspace subdir = dir.open(txn, asList(name)).join();
                 final long length = FDBUtil.decodeLong(txn.get(subdir.pack("length")).join());
                 final String resourceDescription = "FDBIndexOutput(subdir=\"" + subdir + "\")";
-                return new FDBIndexInput(resourceDescription, txc, subdir, name, 0L, length, pageSize);
+                return new FDBIndexInput(resourceDescription, txc, subdir, name, 0L, length, pageSize, pageCache);
             });
         } catch (final CompletionException e) {
             if (e.getCause() instanceof NoSuchDirectoryException) {
@@ -304,9 +316,13 @@ public final class FDBDirectory extends Directory {
         });
     }
 
+    private String toString(final DirectorySubspace dir) {
+        return String.join("/", dir.getPath());
+    }
+
     @Override
     public String toString() {
-        return String.format("FDBDirectory(path=/%s)", String.join("/", dir.getPath()));
+        return String.format("FDBDirectory(path=/%s,uuid=%s)", toString(dir), uuid);
     }
 
 }
