@@ -13,7 +13,7 @@ import com.apple.foundationdb.directory.DirectorySubspace;
 /**
  * A concrete implementation of {@link IndexInput} that reads {@code pages} from
  * FoundationDB. These pages are cached using {@link JCS} using an ephemeral key
- * that is valid only until {@link #close()} is called.
+ * that is valid only until {@link FDBDirectory#close()} is called.
  */
 public final class FDBIndexInput extends IndexInput {
 
