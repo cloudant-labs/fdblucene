@@ -1,41 +1,20 @@
 package com.cloudant.fdblucene;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.concurrent.CompletionException;
 
 import org.apache.lucene.store.AlreadyClosedException;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.LockObtainFailedException;
-import org.apache.lucene.store.LockReleaseFailedException;
-
-import com.apple.foundationdb.TransactionContext;
-import com.apple.foundationdb.directory.DirectoryAlreadyExistsException;
-import com.apple.foundationdb.directory.DirectorySubspace;
 
 public final class FDBLock extends Lock {
 
-    public static Lock obtain(final TransactionContext txc, final DirectorySubspace subdir, final String name) throws IOException {
-        final DirectorySubspace lock;
-        try {
-            lock = subdir.create(txc, Collections.singletonList(name)).join();
-        }  catch (final CompletionException e) {
-            if (e.getCause() instanceof DirectoryAlreadyExistsException) {
-                throw new LockObtainFailedException(name + " already acquired");
-            }
-            throw (e);
-        }
-        return new FDBLock(txc, lock, name);
-    }
-
-    private final TransactionContext txc;
-    private final DirectorySubspace lock;
+    private final Directory dir;
     private final String name;
     private boolean closed = false;
 
-    private FDBLock(final TransactionContext txc, final DirectorySubspace lock, final String name) {
-        this.txc = txc;
-        this.lock = lock;
+    FDBLock(final Directory dir, final String name) {
+        this.dir = dir;
         this.name = name;
     }
 
@@ -44,11 +23,7 @@ public final class FDBLock extends Lock {
         if (closed) {
             return;
         }
-
-        final boolean released = lock.removeIfExists(txc).join();
-        if (!released) {
-            throw new LockReleaseFailedException(name + " not released properly");
-        }
+        dir.deleteFile(name);
         closed = true;
     }
 
@@ -58,8 +33,9 @@ public final class FDBLock extends Lock {
             throw new AlreadyClosedException(name + " already closed.");
         }
 
-        final boolean valid = lock.exists(txc).join();
-        if (!valid) {
+        try {
+            dir.fileLength(name);
+        } catch (final FileNotFoundException e) {
             throw new IOException(name + " no longer valid");
         }
     }

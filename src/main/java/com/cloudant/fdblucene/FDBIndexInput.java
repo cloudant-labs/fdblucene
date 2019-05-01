@@ -8,7 +8,7 @@ import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.IndexInput;
 
 import com.apple.foundationdb.TransactionContext;
-import com.apple.foundationdb.directory.DirectorySubspace;
+import com.apple.foundationdb.subspace.Subspace;
 
 /**
  * A concrete implementation of {@link IndexInput} that reads {@code pages} from
@@ -18,7 +18,7 @@ import com.apple.foundationdb.directory.DirectorySubspace;
 public final class FDBIndexInput extends IndexInput {
 
     private final TransactionContext txc;
-    private final DirectorySubspace subdir;
+    private final Subspace subspace;
     private final String name;
     private final long offset;
     private final long length;
@@ -28,12 +28,12 @@ public final class FDBIndexInput extends IndexInput {
 
     private final GroupCacheAccess<Long, byte[]> pageCache;
 
-    FDBIndexInput(final String resourceDescription, final TransactionContext txc, final DirectorySubspace subdir,
+    FDBIndexInput(final String resourceDescription, final TransactionContext txc, final Subspace subspace,
             final String name, final long offset, final long length, final int pageSize,
             final GroupCacheAccess<Long, byte[]> pageCache) {
         super(resourceDescription);
         this.txc = txc;
-        this.subdir = subdir;
+        this.subspace = subspace;
         this.name = name;
         this.offset = offset;
         this.length = length;
@@ -106,7 +106,7 @@ public final class FDBIndexInput extends IndexInput {
         if (offset < 0 || length < 0 || offset + length > this.length()) {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
-        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subdir, name, this.offset + offset,
+        return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subspace, name, this.offset + offset,
                 length, pageSize, pageCache);
     }
 
@@ -130,7 +130,7 @@ public final class FDBIndexInput extends IndexInput {
     }
 
     private byte[] pageKey(final long pageNumber) {
-        return subdir.pack(pageNumber);
+        return subspace.pack(pageNumber);
     }
 
 }
