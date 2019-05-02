@@ -225,9 +225,16 @@ public final class FDBDirectory extends Directory {
     @Override
     public IndexOutput createTempOutput(final String prefix, final String suffix, final IOContext context)
             throws IOException {
-        final long number = getAndIncrement(txc, "_tmp");
-        final String name = String.format("%s_%s_%s.tmp", prefix, suffix, Long.toString(number, Character.MAX_RADIX));
-        return createOutput(name, context);
+        while (true) {
+            final long number = FDBUtil.RANDOM.nextInt();
+            final String name = String
+                    .format("%s_%s_%s.tmp", prefix, suffix, Long.toString(number, Character.MAX_RADIX));
+            try {
+                return createOutput(name, context);
+            } catch (final FileAlreadyExistsException e) {
+                // Retry.
+            }
+        }
     }
 
     @Override
