@@ -53,9 +53,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private CompletableFuture<Void> lastFlushFuture;
     private long pointer;
 
-    private long readVersion;
-
-    private long readVersionAt;
+    private final ReadVersionCache readVersionCache;
 
     private final int pageSize;
     private final int txnSize;
@@ -67,21 +65,20 @@ public final class FDBIndexOutput extends IndexOutput {
         this.dir = dir;
         this.txc = txc;
         this.subspace = subspace;
+        this.readVersionCache = new ReadVersionCache();
         this.pageSize = pageSize;
         this.txnSize = txnSize;
         txnBuffer = new byte[txnSize];
         crc = new CRC32();
         lastFlushFuture = AsyncUtil.DONE;
         pointer = 0L;
-        readVersion = -1L;
-        readVersionAt = System.currentTimeMillis();
     }
 
     @Override
     public void close() throws IOException {
         lastFlushFuture.join();
         txc.run(txn -> {
-            setReadVersion(txn);
+            readVersionCache.setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,close,%d", getName(), pointer));
             flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             txn.options().setNextWriteNoWriteConflictRange();
@@ -136,7 +133,7 @@ public final class FDBIndexOutput extends IndexOutput {
         this.txnBufferOffset = 0;
 
         lastFlushFuture = txc.runAsync(txn -> {
-            setReadVersion(txn);
+            readVersionCache.setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
             flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             return AsyncUtil.DONE;
@@ -146,17 +143,6 @@ public final class FDBIndexOutput extends IndexOutput {
     private void flushTxnBufferIfFull() {
         if (txnBufferOffset == txnBuffer.length) {
             flushTxnBuffer();
-        }
-    }
-
-    private void setReadVersion(final Transaction txn) {
-        final long now = System.currentTimeMillis();
-        final long readVersionAge = now - readVersionAt;
-        if (readVersion == -1L || readVersionAge > 4000) {
-            readVersion = txn.getReadVersion().join();
-            readVersionAt = now;
-        } else {
-            txn.setReadVersion(readVersion);
         }
     }
 

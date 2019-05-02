@@ -26,6 +26,7 @@ public final class FDBIndexInput extends IndexInput {
     private long pointer;
     private final int pageSize;
 
+    private final ReadVersionCache readVersionCache;
     private final GroupCacheAccess<Long, byte[]> pageCache;
 
     FDBIndexInput(final String resourceDescription, final TransactionContext txc, final Subspace subspace,
@@ -40,6 +41,7 @@ public final class FDBIndexInput extends IndexInput {
         page = null;
         pointer = 0L;
         this.pageSize = pageSize;
+        this.readVersionCache = new ReadVersionCache();
         this.pageCache = pageCache;
     }
 
@@ -116,7 +118,8 @@ public final class FDBIndexInput extends IndexInput {
             page = pageCache.getFromGroup(currentPage, name);
             if (page == null) {
                 final byte[] key = pageKey(currentPage);
-                page = txc.read(txn -> {
+                page = txc.run(txn -> {
+                    readVersionCache.setReadVersion(txn);
                     txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
                     return txn.get(key).join();
                 });
