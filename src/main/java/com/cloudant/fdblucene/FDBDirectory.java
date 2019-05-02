@@ -174,6 +174,16 @@ public final class FDBDirectory extends Directory {
         this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
+    /**
+     * Removes all data related to this directory.
+     */
+    public void delete() {
+        txc.run(txn -> {
+            txn.clear(subspace.range());
+            return null;
+        });
+    }
+
     @Override
     public void close() throws IOException {
         pageCache.clear();
