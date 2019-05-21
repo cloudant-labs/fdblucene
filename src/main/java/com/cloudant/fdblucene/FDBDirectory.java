@@ -6,7 +6,9 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.jcs.JCS;
@@ -158,8 +160,7 @@ public final class FDBDirectory extends Directory {
     private final UUID uuid;
     private final GroupCacheAccess<Long, byte[]> pageCache;
 
-    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final int pageSize,
-            final int txnSize) {
+    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
@@ -222,8 +223,7 @@ public final class FDBDirectory extends Directory {
         }
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
-        return new FDBIndexOutput(this, resourceDescription, name, txc, fileSubspace(fileNumber), pageSize,
-                txnSize);
+        return new FDBIndexOutput(this, resourceDescription, name, txc, fileSubspace(fileNumber), pageSize, txnSize);
     }
 
     /**
@@ -336,8 +336,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String
                 .format("FDBIndexInput(name=%s,number=%d)", name, meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), pageSize,
-                pageCache);
+                meta.getFileLength(), pageSize, pageCache);
     }
 
     /**
@@ -371,6 +370,11 @@ public final class FDBDirectory extends Directory {
     @Override
     public void syncMetaData() throws IOException {
         // intentionally empty
+    }
+
+    @Override
+    public Set<String> getPendingDeletions() throws IOException {
+        return Collections.emptySet();
     }
 
     @Override
