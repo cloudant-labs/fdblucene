@@ -7,7 +7,7 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.Lock;
 
-public final class FDBLock extends Lock {
+final class FDBLock extends Lock {
 
     private final Directory dir;
     private final String name;

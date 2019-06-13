@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.apple.foundationdb.Transaction;
 
-public final class ReadVersionCache {
+final class ReadVersionCache {
 
     private static final long MAX_AGE = TimeUnit.NANOSECONDS.convert(4, TimeUnit.SECONDS);
 

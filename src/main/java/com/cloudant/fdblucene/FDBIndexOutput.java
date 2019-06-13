@@ -59,8 +59,7 @@ public final class FDBIndexOutput extends IndexOutput {
     private final int txnSize;
 
     FDBIndexOutput(final FDBDirectory dir, final String resourceDescription, final String name,
-            final TransactionContext txc, final Subspace subspace, final int pageSize,
-            final int txnSize) {
+            final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
         super(resourceDescription, name);
         this.dir = dir;
         this.txc = txc;
