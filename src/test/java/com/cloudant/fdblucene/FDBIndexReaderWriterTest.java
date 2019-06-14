@@ -16,8 +16,10 @@
 package com.cloudant.fdblucene;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Collections;
 import java.util.Random;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -77,14 +79,23 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
     }
 
     @Test
-    public void storedFields() throws Exception {
+    public void allStoredFields() throws Exception {
         final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
         assertEquals(3, topDocs.totalHits.value);
 
         final Document hit = reader.document(topDocs.scoreDocs[0].doc);
         assertEquals(123.456f, hit.getField("float").numericValue());
         assertEquals(123.456, hit.getField("double").numericValue());
+    }
 
+    @Test
+    public void someStoredFields() throws Exception {
+        final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
+        assertEquals(3, topDocs.totalHits.value);
+
+        final Document hit = reader.document(topDocs.scoreDocs[0].doc, Collections.singleton("float"));
+        assertEquals(123.456f, hit.getField("float").numericValue());
+        assertNull(hit.getField("double"));
     }
 
     @Test

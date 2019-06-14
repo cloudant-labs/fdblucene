@@ -34,6 +34,7 @@ import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.index.StoredFieldVisitor;
+import org.apache.lucene.index.StoredFieldVisitor.Status;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.Bits;
@@ -83,18 +84,20 @@ public final class FDBIndexReader extends LeafReader {
                             Collections.emptyMap(), 0, 0, 0, false);
 
                     try {
-                        if ("b".equals(fieldType)) {
-                            visitor.binaryField(fieldInfo, (byte[]) fieldValue);
-                        } else if ("d".equals(fieldType)) {
-                            visitor.doubleField(fieldInfo, (Double) fieldValue);
-                        } else if ("f".equals(fieldType)) {
-                            visitor.floatField(fieldInfo, (Float) fieldValue);
-                        } else if ("i".equals(fieldType)) {
-                            visitor.intField(fieldInfo, (Integer) fieldValue);
-                        } else if ("l".equals(fieldType)) {
-                            visitor.longField(fieldInfo, (Long) fieldValue);
-                        } else if ("s".equals(fieldType)) {
-                            visitor.stringField(fieldInfo, (byte[]) fieldValue);
+                        if (visitor.needsField(fieldInfo) == Status.YES) {
+                            if ("b".equals(fieldType)) {
+                                visitor.binaryField(fieldInfo, (byte[]) fieldValue);
+                            } else if ("d".equals(fieldType)) {
+                                visitor.doubleField(fieldInfo, (Double) fieldValue);
+                            } else if ("f".equals(fieldType)) {
+                                visitor.floatField(fieldInfo, (Float) fieldValue);
+                            } else if ("i".equals(fieldType)) {
+                                visitor.intField(fieldInfo, (Integer) fieldValue);
+                            } else if ("l".equals(fieldType)) {
+                                visitor.longField(fieldInfo, (Long) fieldValue);
+                            } else if ("s".equals(fieldType)) {
+                                visitor.stringField(fieldInfo, (byte[]) fieldValue);
+                            }
                         }
                     } catch (final IOException e) {
                         throw new CompletionException(e);
