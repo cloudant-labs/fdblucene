@@ -16,6 +16,7 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -44,10 +45,13 @@ import org.apache.lucene.util.BytesRef;
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.MutationType;
 import com.apple.foundationdb.Transaction;
+import com.apple.foundationdb.async.AsyncUtil;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.ByteArrayUtil;
 
 public final class FDBIndexWriter {
+
+    private static final int RETRY_LIMIT = 100;
 
     private final Random random = new Random();
 
@@ -65,15 +69,16 @@ public final class FDBIndexWriter {
     }
 
     public int addDocument(final Document doc) throws IOException {
-        while (true) {
+        for (int i = 0; i < RETRY_LIMIT; i++) {
             final int docID = randomDocID();
             try {
                 db.run(txn -> {
                     Utils.trace(txn, "addDocument(%d)", docID);
-                    addDocument(txn, docID, doc);
+                    addDocument(txn, docID, doc).join();
                     txn.mutate(MutationType.ADD, FDBAccess.numDocsKey(index), ONE);
                     return null;
                 });
+                return docID;
             } catch (final CompletionException e) {
                 if (e.getCause() instanceof DocIdCollisionException) {
                     // Try again.
@@ -81,23 +86,26 @@ public final class FDBIndexWriter {
                 }
                 throw e;
             }
-            return docID;
         }
-
+        throw new DocIdCollisionException();
     }
 
-    public void addDocuments(final Document... docs) throws IOException {
-        while (true) {
+    public int[] addDocuments(final Document... docs) throws IOException {
+        for (int i = 0; i < RETRY_LIMIT; i++) {
             final int[] ids = generateUniqueIDs(docs);
+            final Collection<CompletableFuture<Void>> futures = new HashSet<CompletableFuture<Void>>();
             try {
                 db.run(txn -> {
                     Utils.trace(txn, "addDocuments(%d)", docs.length);
-                    for (int i = 0; i < docs.length; i++) {
-                        addDocument(txn, ids[i], docs[i]);
+                    for (int j = 0; j < docs.length; j++) {
+                        final CompletableFuture<Void> f = addDocument(txn, ids[j], docs[j]);
+                        futures.add(f);
                     }
                     txn.mutate(MutationType.ADD, FDBAccess.numDocsKey(index), ByteArrayUtil.encodeInt(docs.length));
+                    AsyncUtil.whenAll(futures);
                     return null;
                 });
+                return ids;
             } catch (final CompletionException e) {
                 if (e.getCause() instanceof DocIdCollisionException) {
                     // Try again.
@@ -105,8 +113,8 @@ public final class FDBIndexWriter {
                 }
                 throw e;
             }
-            return;
         }
+        throw new DocIdCollisionException();
     }
 
     private int[] generateUniqueIDs(final Document... docs) {
@@ -122,7 +130,7 @@ public final class FDBIndexWriter {
         return result;
     }
 
-    private void addDocument(final Transaction txn, final int docID, final Document doc)
+    private CompletableFuture<Void> addDocument(final Transaction txn, final int docID, final Document doc)
             throws DocIdCollisionException {
         final CompletableFuture<byte[]> future = docIDFuture(txn, docID);
         txn.set(FDBAccess.docIDKey(index, docID), EMPTY);
@@ -133,9 +141,11 @@ public final class FDBIndexWriter {
                 throw new CompletionException(e);
             }
         }
-        if (future.join() != null) {
-            throw new DocIdCollisionException(docID);
-        }
+        return future.thenAccept(value -> {
+            if (future.join() != null) {
+                throw new DocIdCollisionException(docID);
+            }
+        });
     }
 
     private CompletableFuture<byte[]> docIDFuture(final Transaction txn, final int docID) {
