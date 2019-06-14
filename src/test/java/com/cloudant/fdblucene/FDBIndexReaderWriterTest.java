@@ -66,9 +66,11 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         final Analyzer analyzer = new StandardAnalyzer();
 
         final FDBIndexWriter writer = new FDBIndexWriter(DB, subspace, analyzer);
+
         docID1 = writer.addDocument(doc("hello", "abc def ghi"));
-        docID2 = writer.addDocument(doc("bye", "abc ghi def"));
-        docID3 = writer.addDocument(doc("hell", "abc def ghi def def"));
+        final int[] ids = writer.addDocuments(doc("bye", "abc ghi def"), doc("hell", "abc def ghi def def"));
+        docID2 = ids[0];
+        docID3 = ids[1];
 
         reader = new FDBIndexReader(DB, subspace);
         this.searcher = new IndexSearcher(reader);
