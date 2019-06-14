@@ -16,7 +16,6 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
-import java.util.List;
 
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -62,24 +61,25 @@ class FDBPostingsEnum extends PostingsEnum {
         final byte[] end = postingsSubspace.range().end;
 
         return txc.run(txn -> {
-            final List<KeyValue> result = txn.getRange(begin, end, 1).asList().join();
-            if (result.isEmpty()) {
-                throw new Error("nextPosition called too many times");
-            }
-            final KeyValue kv = result.get(0);
-            final Tuple kt = postingsSubspace.unpack(kv.getKey());
-            final Tuple vt = Tuple.fromBytes(kv.getValue());
-            this.pos = (int) kt.getLong(1);
-            this.startOffset = (int) vt.getLong(0);
-            this.endOffset = (int) vt.getLong(1);
-            final byte[] payload = vt.getBytes(2);
-            if (payload == null) {
-                this.payload = null;
-            } else {
-                this.payload = new BytesRef(payload);
-            }
-            return this.pos;
-        });
+            return txn.getRange(begin, end, 1).asList().thenApply(result -> {
+                if (result.isEmpty()) {
+                    throw new Error("nextPosition called too many times");
+                }
+                final KeyValue kv = result.get(0);
+                final Tuple kt = postingsSubspace.unpack(kv.getKey());
+                final Tuple vt = Tuple.fromBytes(kv.getValue());
+                this.pos = (int) kt.getLong(1);
+                this.startOffset = (int) vt.getLong(0);
+                this.endOffset = (int) vt.getLong(1);
+                final byte[] payload = vt.getBytes(2);
+                if (payload == null) {
+                    this.payload = null;
+                } else {
+                    this.payload = new BytesRef(payload);
+                }
+                return this.pos;
+            });
+        }).join();
     }
 
     @Override
@@ -114,22 +114,23 @@ class FDBPostingsEnum extends PostingsEnum {
         final byte[] end = postingsSubspace.range().end;
 
         return txc.run(txn -> {
-            final List<KeyValue> result = txn.getRange(begin, end, 1).asList().join();
-            if (result.isEmpty()) {
-                this.docID = DocIdSetIterator.NO_MORE_DOCS;
-                return DocIdSetIterator.NO_MORE_DOCS;
-            }
+            return txn.getRange(begin, end, 1).asList().thenApply(result -> {
+                if (result.isEmpty()) {
+                    this.docID = DocIdSetIterator.NO_MORE_DOCS;
+                    return DocIdSetIterator.NO_MORE_DOCS;
+                }
 
-            final KeyValue kv = result.get(0);
-            final Tuple kt = postingsSubspace.unpack(kv.getKey());
-            this.docID = (int) kt.getLong(0);
-            this.freq = (int) ByteArrayUtil.decodeInt(kv.getValue());
-            this.pos = -1;
-            this.startOffset = -1;
-            this.endOffset = -1;
-            this.payload = null;
-            return this.docID;
-        });
+                final KeyValue kv = result.get(0);
+                final Tuple kt = postingsSubspace.unpack(kv.getKey());
+                this.docID = (int) kt.getLong(0);
+                this.freq = (int) ByteArrayUtil.decodeInt(kv.getValue());
+                this.pos = -1;
+                this.startOffset = -1;
+                this.endOffset = -1;
+                this.payload = null;
+                return this.docID;
+            });
+        }).join();
     }
 
     @Override

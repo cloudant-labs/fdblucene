@@ -28,7 +28,6 @@ import org.apache.lucene.util.BytesRef;
 import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
 import com.apple.foundationdb.TransactionContext;
-import com.apple.foundationdb.async.AsyncIterator;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.Tuple;
 
@@ -87,9 +86,11 @@ final class FDBTermsEnum extends TermsEnum {
         final byte[] key = FDBAccess.termKey(index, fieldName, text);
         final Range fieldRange = FDBAccess.fieldRange(index, fieldName);
         return txc.run(txn -> {
-            final AsyncIterator<KeyValue> it = txn.getRange(key, fieldRange.end, 1).iterator();
-            if (it.hasNext()) {
-                final KeyValue kv = it.next();
+            return txn.getRange(key, fieldRange.end, 1).asList().thenApply(result -> {
+                if (result.isEmpty()) {
+                    return SeekStatus.END;
+                }
+                final KeyValue kv = result.get(0);
                 final Tuple keyTuple = index.unpack(kv.getKey());
                 this.term = new BytesRef(keyTuple.getBytes(2));
                 updateState(kv.getValue());
@@ -98,10 +99,8 @@ final class FDBTermsEnum extends TermsEnum {
                 } else {
                     return SeekStatus.NOT_FOUND;
                 }
-            } else {
-                return SeekStatus.END;
-            }
-        });
+            });
+        }).join();
     }
 
     @Override
