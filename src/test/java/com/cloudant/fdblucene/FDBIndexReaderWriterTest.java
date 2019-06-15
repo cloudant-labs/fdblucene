@@ -19,6 +19,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Random;
 
@@ -31,7 +32,6 @@ import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
@@ -52,11 +52,13 @@ import org.apache.lucene.util.BytesRef;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.apple.foundationdb.Transaction;
+
 public class FDBIndexReaderWriterTest extends BaseFDBTest {
 
     private Random random = new Random();
 
-    private IndexReader reader;
+    private FDBIndexReader reader;
     private IndexSearcher searcher;
 
     private int docID1;
@@ -74,51 +76,57 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         docID2 = ids[0];
         docID3 = ids[1];
 
-        reader = new FDBIndexReader(DB, subspace);
+        reader = new FDBIndexReader(subspace);
         this.searcher = new IndexSearcher(reader);
     }
 
     @Test
     public void allStoredFields() throws Exception {
-        final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
-        assertEquals(3, topDocs.totalHits.value);
+        reader.run(DB, () -> { // txn around search and doc fetch
+            final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
+            assertEquals(3, topDocs.totalHits.value);
 
-        final Document hit = reader.document(topDocs.scoreDocs[0].doc);
-        assertEquals(123.456f, hit.getField("float").numericValue());
-        assertEquals(123.456, hit.getField("double").numericValue());
+            final Document hit = reader.document(topDocs.scoreDocs[0].doc);
+            assertEquals(123.456f, hit.getField("float").numericValue());
+            assertEquals(123.456, hit.getField("double").numericValue());
+            return null;
+        });
     }
 
     @Test
     public void someStoredFields() throws Exception {
-        final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
-        assertEquals(3, topDocs.totalHits.value);
+        reader.run(DB, () -> { // txn around search and doc fetch
+            final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
+            assertEquals(3, topDocs.totalHits.value);
 
-        final Document hit = reader.document(topDocs.scoreDocs[0].doc, Collections.singleton("float"));
-        assertEquals(123.456f, hit.getField("float").numericValue());
-        assertNull(hit.getField("double"));
+            final Document hit = reader.document(topDocs.scoreDocs[0].doc, Collections.singleton("float"));
+            assertEquals(123.456f, hit.getField("float").numericValue());
+            assertNull(hit.getField("double"));
+            return null;
+        });
     }
 
     @Test
     public void termQuery() throws Exception {
-        final TopDocs topDocs = searcher.search(new TermQuery(new Term("body", "def")), 5);
+        final TopDocs topDocs = search(new TermQuery(new Term("body", "def")), 5);
         assertEquals(3, topDocs.totalHits.value);
     }
 
     @Test
     public void prefixQuery() throws Exception {
-        final TopDocs topDocs = searcher.search(new PrefixQuery(new Term("_id", "hell")), 1);
+        final TopDocs topDocs = search(new PrefixQuery(new Term("_id", "hell")), 1);
         assertEquals(2, topDocs.totalHits.value);
     }
 
     @Test
     public void phraseQuery() throws Exception {
-        final TopDocs topDocs = searcher.search(new PhraseQuery("body", "abc", "def"), 1);
+        final TopDocs topDocs = search(new PhraseQuery("body", "abc", "def"), 1);
         assertEquals(2, topDocs.totalHits.value);
     }
 
     @Test
     public void phraseQuery2() throws Exception {
-        final TopDocs topDocs = searcher.search(new PhraseQuery("body", "def", "def"), 1);
+        final TopDocs topDocs = search(new PhraseQuery("body", "def", "def"), 1);
         assertEquals(1, topDocs.totalHits.value);
     }
 
@@ -126,7 +134,7 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
     public void sorting() throws Exception {
         final Query query = new TermQuery(new Term("body", "def"));
         final Sort sort = new Sort(new SortField("double-sort", Type.DOUBLE));
-        final TopFieldDocs topDocs = searcher.search(query, 10, sort);
+        final TopFieldDocs topDocs = search(query, 10, sort);
         assertEquals(3, topDocs.totalHits.value);
         double low = 0.0;
         for (int i = 0; i < topDocs.totalHits.value; i++) {
@@ -138,23 +146,29 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
 
     @Test
     public void testFDBPostingsEnum() throws Exception {
-        final PostingsEnum p = new FDBPostingsEnum(DB, subspace, "body", new BytesRef("def"));
+        final Transaction txn = DB.createTransaction();
+        try {
+            final PostingsEnum p = new FDBPostingsEnum(txn, subspace, "body", new BytesRef("def"));
 
-        for (int i = 0; i < 3; i++) {
-            int nextID = p.nextDoc();
-            if (nextID == docID1) {
-                assertEquals(1, p.nextPosition());
+            for (int i = 0; i < 3; i++) {
+                int nextID = p.nextDoc();
+                if (nextID == docID1) {
+                    assertEquals(1, p.nextPosition());
+                }
+                if (nextID == docID2) {
+                    assertEquals(2, p.nextPosition());
+                }
+                if (nextID == docID3) {
+                    assertEquals(1, p.nextPosition());
+                    assertEquals(3, p.nextPosition());
+                    assertEquals(4, p.nextPosition());
+                }
             }
-            if (nextID == docID2) {
-                assertEquals(2, p.nextPosition());
-            }
-            if (nextID == docID3) {
-                assertEquals(1, p.nextPosition());
-                assertEquals(3, p.nextPosition());
-                assertEquals(4, p.nextPosition());
-            }
+            assertEquals(DocIdSetIterator.NO_MORE_DOCS, p.nextDoc());
+        } finally {
+            txn.commit().join();
+            txn.close();
         }
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, p.nextDoc());
     }
 
     @Test
@@ -163,35 +177,35 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         builder.add(new TermQuery(new Term("body", "def")), Occur.MUST);
         builder.add(new PrefixQuery(new Term("_id", "hell")), Occur.MUST);
 
-        final TopDocs topDocs = searcher.search(builder.build(), 1);
+        final TopDocs topDocs = search(builder.build(), 1);
         assertEquals(2, topDocs.totalHits.value);
     }
 
     @Test
     public void doubleExactQuery() throws Exception {
         Query query = FDBNumericPoint.newExactQuery("double-pt", 5.5);
-        final TopDocs topDocs = searcher.search(query, 5);
+        final TopDocs topDocs = search(query, 5);
         assertEquals(3, topDocs.totalHits.value);
     }
 
     @Test
     public void doubleRangeQuery() throws Exception {
         Query query = FDBNumericPoint.newRangeQuery("double-pt", 4.0, 6.0);
-        final TopDocs topDocs = searcher.search(query, 5);
+        final TopDocs topDocs = search(query, 5);
         assertEquals(3, topDocs.totalHits.value);
     }
 
     @Test
     public void longExactQuery() throws Exception {
         Query query = FDBNumericPoint.newExactQuery("long-pt", 17L);
-        final TopDocs topDocs = searcher.search(query, 5);
+        final TopDocs topDocs = search(query, 5);
         assertEquals(3, topDocs.totalHits.value);
     }
 
     @Test
     public void longRangeQuery() throws Exception {
         Query query = FDBNumericPoint.newRangeQuery("long-pt", 16L, 18L);
-        final TopDocs topDocs = searcher.search(query, 5);
+        final TopDocs topDocs = search(query, 5);
         assertEquals(3, topDocs.totalHits.value);
     }
 
@@ -212,6 +226,18 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         result.add(new StoredField("float", 123.456f));
         result.add(new StoredField("double", 123.456));
         return result;
+    }
+
+    private TopDocs search(final Query query, final int count) throws IOException {
+        return reader.run(DB, () -> {
+            return searcher.search(query, count);
+        });
+    }
+
+    private TopFieldDocs search(final Query query, final int count, final Sort sort) throws IOException {
+        return reader.run(DB, () -> {
+            return searcher.search(query, count, sort);
+        });
     }
 
 }

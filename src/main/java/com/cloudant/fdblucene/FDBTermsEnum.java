@@ -27,7 +27,7 @@ import org.apache.lucene.util.BytesRef;
 
 import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
-import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.Tuple;
 
@@ -42,7 +42,7 @@ final class FDBTermsEnum extends TermsEnum {
 
     };
 
-    private final TransactionContext txc;
+    private final Transaction txn;
     private final Subspace index;
     private final String fieldName;
 
@@ -50,8 +50,8 @@ final class FDBTermsEnum extends TermsEnum {
     private int docFreq;
     private int totalTermFreq;
 
-    public FDBTermsEnum(final TransactionContext txc, final Subspace index, final String fieldName) {
-        this.txc = txc;
+    public FDBTermsEnum(final Transaction txn, final Subspace index, final String fieldName) {
+        this.txn = txn;
         this.index = index;
         this.fieldName = fieldName;
     }
@@ -69,9 +69,7 @@ final class FDBTermsEnum extends TermsEnum {
     @Override
     public boolean seekExact(final BytesRef text) throws IOException {
         final byte[] key = FDBAccess.termKey(index, fieldName, text);
-        final byte[] value = txc.run(txn -> {
-            return txn.get(key);
-        }).join();
+        final byte[] value = txn.get(key).join();
 
         if (value != null) {
             this.term = text;
@@ -85,21 +83,19 @@ final class FDBTermsEnum extends TermsEnum {
     public SeekStatus seekCeil(BytesRef text) throws IOException {
         final byte[] key = FDBAccess.termKey(index, fieldName, text);
         final Range fieldRange = FDBAccess.fieldRange(index, fieldName);
-        return txc.run(txn -> {
-            return txn.getRange(key, fieldRange.end, 1).asList().thenApply(result -> {
-                if (result.isEmpty()) {
-                    return SeekStatus.END;
-                }
-                final KeyValue kv = result.get(0);
-                final Tuple keyTuple = index.unpack(kv.getKey());
-                this.term = new BytesRef(keyTuple.getBytes(2));
-                updateState(kv.getValue());
-                if (term.bytesEquals(text)) {
-                    return SeekStatus.FOUND;
-                } else {
-                    return SeekStatus.NOT_FOUND;
-                }
-            });
+        return txn.getRange(key, fieldRange.end, 1).asList().thenApply(result -> {
+            if (result.isEmpty()) {
+                return SeekStatus.END;
+            }
+            final KeyValue kv = result.get(0);
+            final Tuple keyTuple = index.unpack(kv.getKey());
+            this.term = new BytesRef(keyTuple.getBytes(2));
+            updateState(kv.getValue());
+            if (term.bytesEquals(text)) {
+                return SeekStatus.FOUND;
+            } else {
+                return SeekStatus.NOT_FOUND;
+            }
         }).join();
     }
 
@@ -136,7 +132,7 @@ final class FDBTermsEnum extends TermsEnum {
 
     @Override
     public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
-        return new FDBPostingsEnum(txc, index, fieldName, term);
+        return new FDBPostingsEnum(txn, index, fieldName, term);
     }
 
     @Override
