@@ -16,6 +16,7 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.PostingsEnum;
@@ -29,6 +30,7 @@ import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
 import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.subspace.Subspace;
+import com.apple.foundationdb.tuple.ByteArrayUtil;
 import com.apple.foundationdb.tuple.Tuple;
 
 final class FDBTermsEnum extends TermsEnum {
@@ -68,29 +70,42 @@ final class FDBTermsEnum extends TermsEnum {
 
     @Override
     public boolean seekExact(final BytesRef text) throws IOException {
-        final byte[] key = FDBAccess.termKey(index, fieldName, text);
-        final byte[] value = txn.get(key).join();
+        final byte[] docFreqKey = FDBAccess.docFreqKey(index, fieldName, text);
+        final CompletableFuture<byte[]> docFreqFuture = txn.get(docFreqKey);
 
-        if (value != null) {
+        final byte[] totalTermFreqKey = FDBAccess.totalTermFreqKey(index, fieldName, text);
+        final CompletableFuture<byte[]> totalTermFreqFuture = txn.get(totalTermFreqKey);
+
+        final byte[] docFreq = docFreqFuture.join();
+        final byte[] totalTermFreq = totalTermFreqFuture.join();
+
+        if (docFreq != null) {
             this.term = text;
-            updateState(value);
+            this.docFreq = (int) ByteArrayUtil.decodeInt(docFreq);
+            this.totalTermFreq = (int) ByteArrayUtil.decodeInt(totalTermFreq);
         }
 
-        return value != null;
+        return docFreq != null;
     }
 
     @Override
     public SeekStatus seekCeil(BytesRef text) throws IOException {
-        final byte[] key = FDBAccess.termKey(index, fieldName, text);
-        final Range fieldRange = FDBAccess.fieldRange(index, fieldName);
-        return txn.getRange(key, fieldRange.end, 1).asList().thenApply(result -> {
+        FDBAccess.docFreqKey(index, fieldName, text);
+        FDBAccess.totalTermFreqKey(index, fieldName, text);
+
+        final byte[] docFreqKey = FDBAccess.docFreqKey(index, fieldName, text);
+        final Range docFreqRange = FDBAccess.docFreqRange(index, fieldName);
+        return txn.getRange(docFreqKey, docFreqRange.end, 1).asList().thenApply(result -> {
             if (result.isEmpty()) {
                 return SeekStatus.END;
             }
             final KeyValue kv = result.get(0);
             final Tuple keyTuple = index.unpack(kv.getKey());
             this.term = new BytesRef(keyTuple.getBytes(2));
-            updateState(kv.getValue());
+            this.docFreq = (int) ByteArrayUtil.decodeInt(kv.getValue());
+            final byte[] totalTermFreqKey = FDBAccess.totalTermFreqKey(index, fieldName, term);
+            final byte[] totalTermFreq = txn.get(totalTermFreqKey).join();
+            this.totalTermFreq = (int) ByteArrayUtil.decodeInt(totalTermFreq);
             if (term.bytesEquals(text)) {
                 return SeekStatus.FOUND;
             } else {
@@ -143,11 +158,6 @@ final class FDBTermsEnum extends TermsEnum {
     @Override
     public TermState termState() throws IOException {
         return TERM_STATE;
-    }
-
-    private void updateState(final byte[] value) {
-        this.docFreq = Utils.decodeInt(value, 0);
-        this.totalTermFreq = Utils.decodeInt(value, 8);
     }
 
 }

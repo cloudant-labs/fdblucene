@@ -18,7 +18,6 @@ package com.cloudant.fdblucene;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.concurrent.CompletionException;
-import java.util.function.Consumer;
 
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValuesType;
@@ -40,7 +39,6 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.Version;
 
-import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
 import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
@@ -97,44 +95,39 @@ public final class FDBIndexReader extends LeafReader {
     public void document(final int docID, final StoredFieldVisitor visitor) throws IOException {
         final Range range = FDBAccess.storedRange(index, docID);
         final Transaction txn = getTxn();
-        txn.getRange(range).forEach(new Consumer<KeyValue>() {
+        txn.getRange(range).forEach(kv -> {
+            final Tuple keyTuple = index.unpack(kv.getKey());
+            final Tuple valueTuple = Tuple.fromBytes(kv.getValue());
 
-            @Override
-            public void accept(final KeyValue kv) {
-                final Tuple keyTuple = index.unpack(kv.getKey());
-                final Tuple valueTuple = Tuple.fromBytes(kv.getValue());
+            final String fieldName = keyTuple.getString(2);
 
-                final String fieldName = keyTuple.getString(2);
+            final String fieldType = valueTuple.getString(0);
+            final Object fieldValue = valueTuple.get(1);
 
-                final String fieldType = valueTuple.getString(0);
-                final Object fieldValue = valueTuple.get(1);
+            final FieldInfo fieldInfo = new FieldInfo(fieldName, 1, false, true, false,
+                    IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS, DocValuesType.NONE, -1L,
+                    Collections.emptyMap(), 0, 0, 0, false);
 
-                final FieldInfo fieldInfo = new FieldInfo(fieldName, 1, false, true, false,
-                        IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS, DocValuesType.NONE, -1L,
-                        Collections.emptyMap(), 0, 0, 0, false);
-
-                try {
-                    if (visitor.needsField(fieldInfo) == Status.YES) {
-                        if ("b".equals(fieldType)) {
-                            visitor.binaryField(fieldInfo, (byte[]) fieldValue);
-                        } else if ("d".equals(fieldType)) {
-                            visitor.doubleField(fieldInfo, (Double) fieldValue);
-                        } else if ("f".equals(fieldType)) {
-                            visitor.floatField(fieldInfo, (Float) fieldValue);
-                        } else if ("i".equals(fieldType)) {
-                            visitor.intField(fieldInfo, (Integer) fieldValue);
-                        } else if ("l".equals(fieldType)) {
-                            visitor.longField(fieldInfo, (Long) fieldValue);
-                        } else if ("s".equals(fieldType)) {
-                            visitor.stringField(fieldInfo, (byte[]) fieldValue);
-                        }
+            try {
+                if (visitor.needsField(fieldInfo) == Status.YES) {
+                    if ("b".equals(fieldType)) {
+                        visitor.binaryField(fieldInfo, (byte[]) fieldValue);
+                    } else if ("d".equals(fieldType)) {
+                        visitor.doubleField(fieldInfo, (Double) fieldValue);
+                    } else if ("f".equals(fieldType)) {
+                        visitor.floatField(fieldInfo, (Float) fieldValue);
+                    } else if ("i".equals(fieldType)) {
+                        visitor.intField(fieldInfo, (Integer) fieldValue);
+                    } else if ("l".equals(fieldType)) {
+                        visitor.longField(fieldInfo, (Long) fieldValue);
+                    } else if ("s".equals(fieldType)) {
+                        visitor.stringField(fieldInfo, (byte[]) fieldValue);
                     }
-                } catch (final IOException e) {
-                    throw new CompletionException(e);
                 }
+            } catch (final IOException e) {
+                throw new CompletionException(e);
             }
         });
-
     }
 
     @Override

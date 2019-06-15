@@ -48,31 +48,44 @@ final class FDBAccess {
         return index.get(t);
     }
 
-    static Range fieldRange(final Subspace index, final String fieldName) {
-        return index.range(Tuple.from("t", fieldName));
+    static Range docFreqRange(final Subspace index, final String fieldName) {
+        return index.range(Tuple.from("df", fieldName));
     }
 
-    static byte[] termKey(final Subspace index, final String fieldName, final BytesRef term) {
-        return index.pack(Tuple.from("t", fieldName, Utils.toBytes(term)));
+    static byte[] docFreqKey(final Subspace index, final String fieldName, final BytesRef term) {
+        return index.pack(Tuple.from("df", fieldName, Utils.toBytes(term)));
     }
 
-    static byte[] postingsKey(final Subspace index, final String fieldName, final BytesRef term, final int docID) {
-        final Tuple t = Tuple.from("p", fieldName, Utils.toBytes(term), docID);
+    static byte[] totalTermFreqKey(final Subspace index, final String fieldName, final BytesRef term) {
+        return index.pack(Tuple.from("ttf", fieldName, Utils.toBytes(term)));
+    }
+
+    static byte[] postingsMetaKey(final Subspace index, final String fieldName, final BytesRef term, final int docID) {
+        final Tuple t = Tuple.from("pm", fieldName, Utils.toBytes(term), docID);
         return index.pack(t);
     }
 
-    static byte[] postingsKey(
+    static byte[] postingsPositionKey(
             final Subspace index,
             final String fieldName,
             final BytesRef term,
             final int docID,
             final int pos) {
-        final Tuple t = Tuple.from("p", fieldName, Utils.toBytes(term), docID, pos);
+        final Tuple t = Tuple.from("pp", fieldName, Utils.toBytes(term), docID, pos);
         return index.pack(t);
     }
 
-    static Subspace postingsSubspace(final Subspace index, final String fieldName, final BytesRef term) {
-        final Tuple t = Tuple.from("p", fieldName, Utils.toBytes(term));
+    static Subspace postingsMetaSubspace(final Subspace index, final String fieldName, final BytesRef term) {
+        final Tuple t = Tuple.from("pm", fieldName, Utils.toBytes(term));
+        return index.get(t);
+    }
+
+    static Subspace postingsPositionSubspace(
+            final Subspace index,
+            final String fieldName,
+            final BytesRef term,
+            final int docID) {
+        final Tuple t = Tuple.from("pp", fieldName, Utils.toBytes(term), docID);
         return index.get(t);
     }
 
@@ -128,6 +141,10 @@ final class FDBAccess {
 
     static byte[] sumTotalTermFreqKey(final Subspace index, final String fieldName) {
         return index.pack(Tuple.from("f", fieldName, "sttf"));
+    }
+
+    static Subspace undoSpace(final Subspace index, final int docID) {
+        return index.get(Tuple.from("undo", docID));
     }
 
 }

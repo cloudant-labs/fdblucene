@@ -16,6 +16,7 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,7 +40,6 @@ import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.IndexableFieldType;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 
 import com.apple.foundationdb.Database;
@@ -56,7 +56,9 @@ public final class FDBIndexWriter {
     private final Random random = new Random();
 
     private static final byte[] EMPTY = new byte[0];
-    private static final byte[] ONE = new byte[] { 1, 0, 0, 0, 0, 0, 0, 0 };
+    private static final byte[] ONE = ByteArrayUtil.encodeInt(1);
+    private static final byte[] ZERO = ByteArrayUtil.encodeInt(0);
+    private static final byte[] NEGATIVE_ONE = ByteArrayUtil.encodeInt(-1);
 
     private final Database db;
     private final Subspace index;
@@ -132,15 +134,22 @@ public final class FDBIndexWriter {
 
     private CompletableFuture<Void> addDocument(final Transaction txn, final int docID, final Document doc)
             throws DocIdCollisionException {
+        final Undo undo = new Undo();
+
         final CompletableFuture<byte[]> future = docIDFuture(txn, docID);
         txn.set(FDBAccess.docIDKey(index, docID), EMPTY);
+        undo.clear(FDBAccess.docIDKey(index, docID));
+        undo.mutate(MutationType.ADD, FDBAccess.numDocsKey(index), NEGATIVE_ONE);
+        undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.numDocsKey(index), ZERO);
+
         for (final IndexableField field : doc) {
             try {
-                indexField(txn, docID, field);
+                indexField(txn, docID, field, undo);
             } catch (final IOException e) {
                 throw new CompletionException(e);
             }
         }
+        undo.save(txn, FDBAccess.undoSpace(index, docID));
         return future.thenAccept(value -> {
             if (future.join() != null) {
                 throw new DocIdCollisionException(docID);
@@ -152,47 +161,86 @@ public final class FDBIndexWriter {
         return txn.get(FDBAccess.docIDKey(index, docID));
     }
 
-    public void deleteDocument(final Query... queries) throws IOException {
-        throw new UnsupportedOperationException("deleteDocument not supported.");
+    public void deleteDocuments(final Term... terms) {
+        db.run(txn -> {
+            Utils.trace(txn, "deleteDocument(%s)", Arrays.toString(terms));
+            for (final Term term : terms) {
+                deleteDocuments(txn, term);
+            }
+            return null;
+        });
     }
 
-    public void deleteDocument(final Term... terms) {
-        throw new UnsupportedOperationException("deleteDocument not supported.");
+    public int updateDocument(final Term term, final Document doc) throws IOException {
+        for (int i = 0; i < RETRY_LIMIT; i++) {
+            final int docID = randomDocID();
+            try {
+                return db.run(txn -> {
+                    Utils.trace(txn, "updateDocument(%s)", term);
+                    deleteDocuments(txn, term);
+                    addDocument(txn, docID, doc).join();
+                    txn.mutate(MutationType.ADD, FDBAccess.numDocsKey(index), ONE);
+                    return docID;
+                });
+            } catch (final CompletionException e) {
+                if (e.getCause() instanceof DocIdCollisionException) {
+                    // Try again.
+                    continue;
+                }
+                throw e;
+            }
+        }
+        throw new DocIdCollisionException();
     }
 
-    public void updateDocument(final Term term, final Iterable<? extends IndexableField> doc) throws IOException {
-        throw new UnsupportedOperationException("updateDocument not supported.");
+    private void deleteDocuments(final Transaction txn, final Term term) {
+        final Subspace postings = FDBAccess.postingsMetaSubspace(index, term.field(), term.bytes());
+        txn.getRange(postings.range()).forEach(kv -> {
+            final int docID = (int) postings.unpack(kv.getKey()).getLong(0);
+            deleteDocument(txn, docID);
+        });
     }
 
-    private void indexField(final Transaction txn, final int docID, final IndexableField field) throws IOException {
+    private void deleteDocument(final Transaction txn, final int docID) {
+        final Undo undo = new Undo();
+        undo.load(txn, FDBAccess.undoSpace(index, docID));
+        undo.run(txn);
+        txn.clear(FDBAccess.undoSpace(index, docID).range());
+    }
+
+    private void indexField(final Transaction txn, final int docID, final IndexableField field, final Undo undo)
+            throws IOException {
         final String fieldName = field.name();
         final IndexableFieldType fieldType = field.fieldType();
 
         if (fieldType.indexOptions() != IndexOptions.NONE) {
-            indexInvertedField(txn, docID, fieldName, field);
+            indexInvertedField(txn, docID, fieldName, field, undo);
         }
 
         if (fieldType.stored()) {
-            indexStoredField(txn, docID, fieldName, field);
+            indexStoredField(txn, docID, fieldName, field, undo);
         }
 
         final DocValuesType dvType = fieldType.docValuesType();
         if (dvType != DocValuesType.NONE) {
-            indexDocValue(txn, dvType, docID, fieldName, field);
+            indexDocValue(txn, dvType, docID, fieldName, field, undo);
         }
 
         if (fieldType.pointDataDimensionCount() > 0) {
-            indexPoint(txn, docID, fieldName, field);
+            indexPoint(txn, docID, fieldName, field, undo);
         }
 
         txn.mutate(MutationType.ADD, FDBAccess.sumDocFreqKey(index, fieldName), ONE);
+        undo.mutate(MutationType.ADD, FDBAccess.sumDocFreqKey(index, fieldName), NEGATIVE_ONE);
+        undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.sumDocFreqKey(index, fieldName), ZERO);
     }
 
     private void indexInvertedField(
             final Transaction txn,
             final int docID,
             final String fieldName,
-            final IndexableField field) throws IOException {
+            final IndexableField field,
+            final Undo undo) throws IOException {
 
         try (final TokenStream stream = field.tokenStream(analyzer, null)) {
             final TermToBytesRefAttribute termAttribute = stream.getAttribute(TermToBytesRefAttribute.class);
@@ -220,17 +268,26 @@ public final class FDBIndexWriter {
                     return (v == null) ? 1 : v + 1;
                 });
 
-                final byte[] termValue = new byte[16];
                 if (!seen.contains(term)) {
-                    Utils.encodeInt(termValue, 0, 1);
+                    txn.mutate(MutationType.ADD, FDBAccess.docFreqKey(index, fieldName, term), ONE);
+                    undo.mutate(MutationType.ADD, FDBAccess.docFreqKey(index, fieldName, term), NEGATIVE_ONE);
+                    undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.docFreqKey(index, fieldName, term), ZERO);
                     seen.add(term);
                 }
-                Utils.encodeInt(termValue, 8, termFreq);
-                txn.mutate(MutationType.ADD, FDBAccess.termKey(index, fieldName, term), termValue);
+                txn.mutate(
+                        MutationType.ADD,
+                        FDBAccess.totalTermFreqKey(index, fieldName, term),
+                        ByteArrayUtil.encodeInt(termFreq));
+                undo.mutate(
+                        MutationType.ADD,
+                        FDBAccess.totalTermFreqKey(index, fieldName, term),
+                        ByteArrayUtil.encodeInt(-termFreq));
+                undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.totalTermFreqKey(index, fieldName, term), ZERO);
 
-                final byte[] postingsKey = FDBAccess.postingsKey(index, fieldName, term, docID, pos);
+                final byte[] postingsKey = FDBAccess.postingsPositionKey(index, fieldName, term, docID, pos);
                 final byte[] postingsValue = FDBAccess.postingsValue(startOffset, endOffset, payload);
                 txn.set(postingsKey, postingsValue);
+                undo.clear(postingsKey);
                 pos += posIncr;
                 length++;
             }
@@ -238,21 +295,27 @@ public final class FDBIndexWriter {
 
             if (!termFreqs.isEmpty()) {
                 termFreqs.forEach((k, v) -> {
-                    txn.mutate(
-                            MutationType.ADD,
-                            FDBAccess.postingsKey(index, fieldName, k, docID),
-                            ByteArrayUtil.encodeInt(v));
+                    final byte[] key = FDBAccess.postingsMetaKey(index, fieldName, k, docID);
+                    txn.set(key, ByteArrayUtil.encodeInt(v));
+                    undo.clear(key);
                 });
 
-                txn.mutate(
-                        MutationType.ADD,
-                        FDBAccess.normKey(index, fieldName, docID),
-                        ByteArrayUtil.encodeInt(length));
+                txn.set(FDBAccess.normKey(index, fieldName, docID), ByteArrayUtil.encodeInt(length));
+                undo.clear(FDBAccess.normKey(index, fieldName, docID));
+
                 txn.mutate(MutationType.ADD, FDBAccess.docCountKey(index, fieldName), ONE);
+                undo.mutate(MutationType.ADD, FDBAccess.docCountKey(index, fieldName), NEGATIVE_ONE);
+                undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.docCountKey(index, fieldName), ZERO);
+
                 txn.mutate(
                         MutationType.ADD,
                         FDBAccess.sumTotalTermFreqKey(index, fieldName),
                         ByteArrayUtil.encodeInt(length));
+                undo.mutate(
+                        MutationType.ADD,
+                        FDBAccess.sumTotalTermFreqKey(index, fieldName),
+                        ByteArrayUtil.encodeInt(-length));
+                undo.mutate(MutationType.COMPARE_AND_CLEAR, FDBAccess.sumTotalTermFreqKey(index, fieldName), ZERO);
             }
         }
     }
@@ -261,10 +324,12 @@ public final class FDBIndexWriter {
             final Transaction txn,
             final int docID,
             final String fieldName,
-            final IndexableField field) {
+            final IndexableField field,
+            final Undo undo) {
         final byte[] key = FDBAccess.storedKey(index, docID, fieldName);
         final byte[] value = FDBAccess.storedValue(field);
         txn.set(key, value);
+        undo.clear(key);
     }
 
     private void indexDocValue(
@@ -272,12 +337,13 @@ public final class FDBIndexWriter {
             final DocValuesType dvType,
             final int docID,
             final String fieldName,
-            final IndexableField field) {
+            final IndexableField field,
+            final Undo undo) {
         switch (dvType) {
         case NUMERIC:
-            txn.set(
-                    FDBAccess.numericDocValuesKey(index, fieldName, docID),
-                    ByteArrayUtil.encodeInt(field.numericValue().longValue()));
+            final byte[] key = FDBAccess.numericDocValuesKey(index, fieldName, docID);
+            txn.set(key, ByteArrayUtil.encodeInt(field.numericValue().longValue()));
+            undo.clear(key);
             break;
         default:
             throw new IllegalArgumentException("non-numeric DocValue not supported");
@@ -288,7 +354,8 @@ public final class FDBIndexWriter {
             final Transaction txn,
             final int docID,
             final String fieldName,
-            final IndexableField field) {
+            final IndexableField field,
+            final Undo undo) {
         throw new IllegalArgumentException("Points not supported");
     }
 
