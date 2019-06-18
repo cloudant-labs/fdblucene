@@ -16,21 +16,20 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
-import java.util.List;
 
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
 
 import com.apple.foundationdb.KeyValue;
-import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.ByteArrayUtil;
 import com.apple.foundationdb.tuple.Tuple;
 
 class FDBPostingsEnum extends PostingsEnum {
 
-    private final TransactionContext txc;
+    private final Transaction txn;
     private final Subspace index;
     private final String fieldName;
     private final BytesRef term;
@@ -42,9 +41,8 @@ class FDBPostingsEnum extends PostingsEnum {
     private BytesRef payload = null;
     private int docID = -1;
 
-    public FDBPostingsEnum(final TransactionContext txc, final Subspace index, final String fieldName,
-            final BytesRef term) {
-        this.txc = txc;
+    public FDBPostingsEnum(final Transaction txn, final Subspace index, final String fieldName, final BytesRef term) {
+        this.txn = txn;
         this.index = index;
         this.fieldName = fieldName;
         this.term = BytesRef.deepCopyOf(term);
@@ -61,8 +59,7 @@ class FDBPostingsEnum extends PostingsEnum {
         final byte[] begin = postingsSubspace.pack(Tuple.from(this.docID, this.pos + 1));
         final byte[] end = postingsSubspace.range().end;
 
-        return txc.run(txn -> {
-            final List<KeyValue> result = txn.getRange(begin, end, 1).asList().join();
+        return txn.getRange(begin, end, 1).asList().thenApply(result -> {
             if (result.isEmpty()) {
                 throw new Error("nextPosition called too many times");
             }
@@ -79,7 +76,7 @@ class FDBPostingsEnum extends PostingsEnum {
                 this.payload = new BytesRef(payload);
             }
             return this.pos;
-        });
+        }).join();
     }
 
     @Override
@@ -113,8 +110,7 @@ class FDBPostingsEnum extends PostingsEnum {
         final byte[] begin = postingsSubspace.pack(target);
         final byte[] end = postingsSubspace.range().end;
 
-        return txc.run(txn -> {
-            final List<KeyValue> result = txn.getRange(begin, end, 1).asList().join();
+        return txn.getRange(begin, end, 1).asList().thenApply(result -> {
             if (result.isEmpty()) {
                 this.docID = DocIdSetIterator.NO_MORE_DOCS;
                 return DocIdSetIterator.NO_MORE_DOCS;
@@ -129,7 +125,7 @@ class FDBPostingsEnum extends PostingsEnum {
             this.endOffset = -1;
             this.payload = null;
             return this.docID;
-        });
+        }).join();
     }
 
     @Override

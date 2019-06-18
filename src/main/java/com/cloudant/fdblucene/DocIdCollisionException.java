@@ -23,4 +23,8 @@ final class DocIdCollisionException extends RuntimeException {
         super("collision on doc id " + docID);
     }
 
+    DocIdCollisionException() {
+        super("Unable to find a free doc id");
+    }
+
 }

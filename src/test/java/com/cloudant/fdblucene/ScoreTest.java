@@ -135,12 +135,20 @@ public class ScoreTest {
         for (final Document doc : docs) {
             writer.addDocument(doc);
         }
-        return new FDBIndexReader(DB, subspace2);
+        return new FDBIndexReader(subspace2);
     }
 
     private TopDocs search(final String prefix, final Query query, final IndexReader reader) throws IOException {
         final IndexSearcher searcher = new IndexSearcher(reader);
-        final TopDocs result = searcher.search(query, 1);
+        final TopDocs result;
+
+        if (reader instanceof FDBIndexReader) {
+            result = ((FDBIndexReader) reader).run(DB, () -> {
+                return searcher.search(query, 1);
+            });
+        } else {
+            result = searcher.search(query, 1);
+        }
 
         if (VERBOSE) {
             for (final ScoreDoc doc : result.scoreDocs) {
