@@ -66,6 +66,8 @@ public final class FDBIndexReader extends LeafReader {
                     return retryable.get();
                 } catch (final IOException e) {
                     throw new CompletionException(e);
+                } finally {
+                    txnHolder.set(null);
                 }
             });
         } catch (final CompletionException e) {
@@ -74,8 +76,6 @@ public final class FDBIndexReader extends LeafReader {
                 throw (IOException) cause;
             }
             throw e;
-        } finally {
-            txnHolder.set(null);
         }
     }
 
