@@ -37,6 +37,7 @@ import org.apache.lucene.index.StoredFieldVisitor.Status;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.IOSupplier;
 import org.apache.lucene.util.Version;
 
 import com.apple.foundationdb.Range;
