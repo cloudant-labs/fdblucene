@@ -55,8 +55,8 @@ class FDBPostingsEnum extends PostingsEnum {
 
     @Override
     public int nextPosition() throws IOException {
-        final Subspace postingsSubspace = FDBAccess.postingsSubspace(index, fieldName, term);
-        final byte[] begin = postingsSubspace.pack(Tuple.from(this.docID, this.pos + 1));
+        final Subspace postingsSubspace = FDBAccess.postingsPositionSubspace(index, fieldName, term, this.docID);
+        final byte[] begin = postingsSubspace.pack(this.pos + 1);
         final byte[] end = postingsSubspace.range().end;
 
         return txn.getRange(begin, end, 1).asList().thenApply(result -> {
@@ -66,7 +66,7 @@ class FDBPostingsEnum extends PostingsEnum {
             final KeyValue kv = result.get(0);
             final Tuple kt = postingsSubspace.unpack(kv.getKey());
             final Tuple vt = Tuple.fromBytes(kv.getValue());
-            this.pos = (int) kt.getLong(1);
+            this.pos = (int) kt.getLong(0);
             this.startOffset = (int) vt.getLong(0);
             this.endOffset = (int) vt.getLong(1);
             final byte[] payload = vt.getBytes(2);
@@ -106,7 +106,7 @@ class FDBPostingsEnum extends PostingsEnum {
 
     @Override
     public int advance(final int target) throws IOException {
-        final Subspace postingsSubspace = FDBAccess.postingsSubspace(index, fieldName, term);
+        final Subspace postingsSubspace = FDBAccess.postingsMetaSubspace(index, fieldName, term);
         final byte[] begin = postingsSubspace.pack(target);
         final byte[] end = postingsSubspace.range().end;
 

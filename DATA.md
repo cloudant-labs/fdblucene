@@ -50,5 +50,5 @@ Term level data
 Postings
 --------
 
-("p", $fieldName, $term, $docID) -> (freq)
-("p", $fieldName, $term, $docID, $pos) -> (startOffset, endOffset, payload)
+("pm", $fieldName, $term, $docID) -> (freq)
+("pp", $fieldName, $term, $docID, $pos) -> (startOffset, endOffset, payload)

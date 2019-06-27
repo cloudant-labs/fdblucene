@@ -37,22 +37,6 @@ class Utils {
         return result;
     }
 
-    static void encodeInt(final byte[] arr, final int offset, final int v) {
-        arr[offset] = (byte) (0xff & v);
-        arr[offset + 1] = (byte) (0xff & (v >> 8));
-        arr[offset + 2] = (byte) (0xff & (v >> 16));
-        arr[offset + 3] = (byte) (0xff & (v >> 24));
-        arr[offset + 4] = 0;
-        arr[offset + 5] = 0;
-        arr[offset + 6] = 0;
-        arr[offset + 7] = 0;
-    }
-
-    static int decodeInt(final byte[] value, final int offset) {
-        return ((value[offset] & 0xff) | ((value[offset + 1] & 0xff) << 8) | ((value[offset + 2] & 0xff) << 16)
-                | (value[offset + 3] & 0xff) << 24);
-    }
-
     static int getOrDefault(final TransactionContext txc, final byte[] key, final int defaultValue) {
         final byte[] value = txc.read(txn -> {
             return txn.get(key);
