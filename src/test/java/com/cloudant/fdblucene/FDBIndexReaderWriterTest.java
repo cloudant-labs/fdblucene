@@ -114,7 +114,13 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
 
     @Test
     public void prefixQuery() throws Exception {
-        final TopDocs topDocs = search(new PrefixQuery(new Term("_id", "hell")), 1);
+        final TopDocs topDocs = search(new PrefixQuery(new Term("_id", "hel")), 2);
+        assertEquals(2, topDocs.totalHits.value);
+    }
+
+    @Test
+    public void prefixQuery2() throws Exception {
+        final TopDocs topDocs = search(new PrefixQuery(new Term("_id", "hell")), 2);
         assertEquals(2, topDocs.totalHits.value);
     }
 
