@@ -321,7 +321,7 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public Lock obtainLock(final String name) throws IOException {
-        return FDBLock.obtain(this, name);
+        return FDBLock.obtain(this, uuid, name);
     }
 
     /**
