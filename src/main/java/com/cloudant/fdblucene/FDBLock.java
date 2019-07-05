@@ -17,16 +17,27 @@ package com.cloudant.fdblucene;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.Lock;
+import org.apache.lucene.store.LockObtainFailedException;
 
 final class FDBLock extends Lock {
 
     private final Directory dir;
     private final String name;
     private boolean closed = false;
+
+    public static Lock obtain(final Directory dir, final String name) throws IOException {
+        try {
+            dir.createOutput(name, null).close();
+            return new FDBLock(dir, name);
+        } catch (FileAlreadyExistsException e) {
+            throw new LockObtainFailedException("Lock for " + name + " already obtained.", e);
+        }
+    }
 
     FDBLock(final Directory dir, final String name) {
         this.dir = dir;
