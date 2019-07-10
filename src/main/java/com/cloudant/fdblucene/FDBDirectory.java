@@ -34,7 +34,6 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.LockObtainFailedException;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
@@ -322,12 +321,7 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public Lock obtainLock(final String name) throws IOException {
-        try {
-            createOutput(name, null).close();
-            return new FDBLock(this, name);
-        } catch (FileAlreadyExistsException e) {
-            throw new LockObtainFailedException("Lock for " + name + " already obtained.", e);
-        }
+        return FDBLock.obtain(this, uuid, name);
     }
 
     /**
