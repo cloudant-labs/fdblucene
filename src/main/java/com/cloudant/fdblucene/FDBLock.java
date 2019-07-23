@@ -58,7 +58,6 @@ final class FDBLock extends Lock {
         if (closed) {
             return;
         }
-        dir.deleteFile(name);
         closed = true;
     }
 
