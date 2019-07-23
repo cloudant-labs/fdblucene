@@ -15,7 +15,6 @@
  *******************************************************************************/
 package com.cloudant.fdblucene;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.util.UUID;
@@ -32,7 +31,6 @@ final class FDBLock extends Lock {
     private final Directory dir;
     private final UUID uuid;
     private final String name;
-    private boolean invalid = false;
     private boolean closed = false;
 
     public static Lock obtain(final Directory dir, final UUID uuid, final String name) throws IOException {
@@ -58,7 +56,14 @@ final class FDBLock extends Lock {
         if (closed) {
             return;
         }
-        closed = true;
+
+        try {
+            ensureValid();
+            dir.deleteFile(name);
+        }
+        finally {
+            closed = true;
+        }
     }
 
     @Override
@@ -66,21 +71,16 @@ final class FDBLock extends Lock {
         if (closed) {
             throw new AlreadyClosedException(name + " already closed.");
         }
-        if (invalid) {
-            throw new IOException(name + " no longer valid");
-        }
 
         try (final IndexInput input = dir.openInput(name, null)) {
             final long msb = input.readLong();
             final long lsb = input.readLong();
             final UUID current = new UUID(msb, lsb);
             if (!this.uuid.equals(current)) {
-                invalid = true;
-                ensureValid();
+                throw new AlreadyClosedException(name + " no longer valid.");
             }
-        } catch (final FileNotFoundException e) {
-            invalid = true;
-            ensureValid();
+        } catch (final IOException e) {
+            throw new AlreadyClosedException(name + " no longer valid.");
         }
     }
 
