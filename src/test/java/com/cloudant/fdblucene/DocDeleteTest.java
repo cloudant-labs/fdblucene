@@ -23,6 +23,8 @@ import com.apple.foundationdb.tuple.Tuple;
 
 public class DocDeleteTest extends BaseFDBTest {
 
+    private static boolean VERBOSE = false;
+
     @Test
     public void delete() throws Exception {
         final Analyzer analyzer = new StandardAnalyzer();
@@ -84,7 +86,9 @@ public class DocDeleteTest extends BaseFDBTest {
             txn.getRange(s.range()).forEach(kv -> {
                 final Tuple key = subspace.unpack(kv.getKey());
                 final String value = Arrays.toString(kv.getValue());
-                System.out.printf("%s %s\n", key, value);
+                if (VERBOSE) {
+                    System.out.printf("%s %s\n", key, value);
+                }
                 counter.getAndIncrement();
             });
             return null;
