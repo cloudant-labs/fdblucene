@@ -189,6 +189,10 @@ public final class FDBDirectory extends Directory {
         this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
+    public UUID getUUID() {
+        return uuid;
+    }
+
     /**
      * Removes all data related to this directory.
      */
