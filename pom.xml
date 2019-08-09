@@ -46,7 +46,7 @@
     <dependency>
       <groupId>org.foundationdb</groupId>
       <artifactId>fdb-java</artifactId>
-      <version>6.1.8</version>
+      <version>6.0.18</version>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>

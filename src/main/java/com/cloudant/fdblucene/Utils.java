@@ -26,8 +26,7 @@ class Utils {
     static void trace(final Transaction txn, final String format, final Object... args) {
         if (System.getenv("FDB_NETWORK_OPTION_TRACE_ENABLE") != null) {
             final String str = String.format(format, args);
-            txn.options().setDebugTransactionIdentifier(str);
-            txn.options().setLogTransaction();
+            txn.options().setTransactionLoggingEnable(str);
         }
     }
 
