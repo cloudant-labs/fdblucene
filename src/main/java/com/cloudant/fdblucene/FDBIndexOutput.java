@@ -17,6 +17,7 @@ package com.cloudant.fdblucene;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
@@ -153,7 +154,9 @@ public final class FDBIndexOutput extends IndexOutput {
         lastFlushFuture = txc.runAsync(txn -> {
             readVersionCache.setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
-            flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+            applyIfExists(txn, value -> {
+                flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+            });
             return AsyncUtil.DONE;
         });
     }
@@ -166,11 +169,21 @@ public final class FDBIndexOutput extends IndexOutput {
 
     private void setFileLength(final TransactionContext txc, final long length) {
         txc.run(txn -> {
-            final byte[] value = txn.get(metaKey).join();
-            final FileMetaData meta = new FileMetaData(value).setFileLength(length);
-            txn.set(metaKey, meta.pack());
+            applyIfExists(txn, value -> {
+                final FileMetaData meta = new FileMetaData(value).setFileLength(length);
+                txn.set(metaKey, meta.pack());
+            });
             return null;
         });
+    }
+
+    private void applyIfExists(final Transaction txn, final Consumer<byte[]> fun) {
+        txn.get(metaKey).thenApply(value -> {
+            if (value != null) {
+                fun.accept(value);
+            }
+            return null;
+        }).join();
     }
 
 }
