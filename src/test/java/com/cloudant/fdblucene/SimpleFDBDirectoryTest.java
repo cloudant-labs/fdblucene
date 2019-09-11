@@ -186,6 +186,19 @@ public class SimpleFDBDirectoryTest {
         }
     }
 
+    @Test
+    public void testCloseAfterDeleteShouldntThrow() throws Exception {
+        final Directory dir = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        assertCloseDoesntThrowOnDeletedFile(dir);
+    }
+
+    private void assertCloseDoesntThrowOnDeletedFile(final Directory dir) throws Exception {
+        cleanupDir(dir);
+        final IndexOutput out = dir.createOutput("foo", null);
+        dir.deleteFile("foo");
+        out.close();
+    }
+
     private void addDocument(final IndexWriter writer, final String docId) throws IOException {
         final Document doc = new Document();
         doc.add(new TextField("foo", "hello everybody", Store.NO));
