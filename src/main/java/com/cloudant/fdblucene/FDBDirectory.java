@@ -51,7 +51,7 @@ import com.apple.foundationdb.tuple.Tuple;
  */
 public final class FDBDirectory extends Directory {
 
-    private static class FileMetaData {
+    static class FileMetaData {
 
         private final Tuple asTuple;
 
@@ -241,7 +241,8 @@ public final class FDBDirectory extends Directory {
         }
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
-        return new FDBIndexOutput(this, resourceDescription, name, txc, fileSubspace(fileNumber), pageSize, txnSize);
+        return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
+                pageSize, txnSize);
     }
 
     /**
@@ -294,16 +295,6 @@ public final class FDBDirectory extends Directory {
         }
 
         return meta.getFileLength();
-    }
-
-    void setFileLength(final TransactionContext txc, final String name, final long length) {
-        final byte[] metaKey = metaKey(name);
-        txc.run(txn -> {
-            final byte[] value = txn.get(metaKey).join();
-            final FileMetaData meta = new FileMetaData(value).setFileLength(length);
-            txn.set(metaKey, meta.pack());
-            return null;
-        });
     }
 
     @Override
