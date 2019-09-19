@@ -17,6 +17,7 @@ package com.cloudant.fdblucene;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
@@ -25,6 +26,7 @@ import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.async.AsyncUtil;
 import com.apple.foundationdb.subspace.Subspace;
+import com.cloudant.fdblucene.FDBDirectory.FileMetaData;
 
 public final class FDBIndexOutput extends IndexOutput {
 
@@ -59,6 +61,7 @@ public final class FDBIndexOutput extends IndexOutput {
 
     private final FDBDirectory dir;
     private final TransactionContext txc;
+    private final byte[] metaKey;
     private final Subspace subspace;
     private byte[] txnBuffer;
 
@@ -74,10 +77,12 @@ public final class FDBIndexOutput extends IndexOutput {
     private final int txnSize;
 
     FDBIndexOutput(final FDBDirectory dir, final String resourceDescription, final String name,
-            final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
+            final TransactionContext txc, final byte[] metaKey, final Subspace subspace, final int pageSize,
+            final int txnSize) {
         super(resourceDescription, name);
         this.dir = dir;
         this.txc = txc;
+        this.metaKey = metaKey;
         this.subspace = subspace;
         this.readVersionCache = new ReadVersionCache();
         this.pageSize = pageSize;
@@ -97,7 +102,7 @@ public final class FDBIndexOutput extends IndexOutput {
             flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             txn.options().setNextWriteNoWriteConflictRange();
 
-            dir.setFileLength(txn, getName(), pointer);
+            setFileLength(txn, pointer);
             return null;
         });
     }
@@ -149,7 +154,9 @@ public final class FDBIndexOutput extends IndexOutput {
         lastFlushFuture = txc.runAsync(txn -> {
             readVersionCache.setReadVersion(txn);
             txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
-            flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+            applyIfExists(txn, value -> {
+                flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+            });
             return AsyncUtil.DONE;
         });
     }
@@ -158,6 +165,25 @@ public final class FDBIndexOutput extends IndexOutput {
         if (txnBufferOffset == txnBuffer.length) {
             flushTxnBuffer();
         }
+    }
+
+    private void setFileLength(final TransactionContext txc, final long length) {
+        txc.run(txn -> {
+            applyIfExists(txn, value -> {
+                final FileMetaData meta = new FileMetaData(value).setFileLength(length);
+                txn.set(metaKey, meta.pack());
+            });
+            return null;
+        });
+    }
+
+    private void applyIfExists(final Transaction txn, final Consumer<byte[]> fun) {
+        txn.get(metaKey).thenApply(value -> {
+            if (value != null) {
+                fun.accept(value);
+            }
+            return null;
+        }).join();
     }
 
 }
