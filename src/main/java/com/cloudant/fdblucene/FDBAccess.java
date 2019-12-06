@@ -48,6 +48,15 @@ final class FDBAccess {
         return index.get(t);
     }
 
+    static byte[] binaryDocValuesKey(final Subspace index, final String fieldName, final int docID) {
+        return index.pack(Tuple.from("bdv", fieldName, docID));
+    }
+
+    static Subspace binaryDocValuesSubspace(final Subspace index, final String fieldName) {
+        final Tuple t = Tuple.from("bdv", fieldName);
+        return index.get(t);
+    }
+
     static Range docFreqRange(final Subspace index, final String fieldName) {
         return index.range(Tuple.from("df", fieldName));
     }

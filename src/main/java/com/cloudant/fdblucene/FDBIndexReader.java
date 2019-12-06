@@ -133,7 +133,7 @@ public final class FDBIndexReader extends LeafReader {
 
     @Override
     public BinaryDocValues getBinaryDocValues(final String field) throws IOException {
-        throw new UnsupportedOperationException("getBinaryDocValues not supported.");
+        return new FDBBinaryDocValues(getTxn(), index, field);
     }
 
     @Override

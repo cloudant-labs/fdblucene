@@ -23,12 +23,15 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Random;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.DoubleDocValuesField;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
@@ -137,7 +140,7 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
     }
 
     @Test
-    public void sorting() throws Exception {
+    public void numericSorting() throws Exception {
         final Query query = new TermQuery(new Term("body", "def"));
         final Sort sort = new Sort(new SortField("double-sort", Type.DOUBLE));
         final TopFieldDocs topDocs = search(query, 10, sort);
@@ -146,6 +149,20 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         for (int i = 0; i < topDocs.totalHits.value; i++) {
             final Double order = (Double) ((FieldDoc) topDocs.scoreDocs[i]).fields[0];
             assertTrue(order >= low);
+            low = order;
+        }
+    }
+
+    @Test
+    public void stringSorting() throws Exception {
+        final Query query = new TermQuery(new Term("body", "def"));
+        final Sort sort = new Sort(new SortField("str-sort", Type.STRING_VAL));
+        final TopFieldDocs topDocs = search(query, 10, sort);
+        assertEquals(3, topDocs.totalHits.value);
+        BytesRef low = new BytesRef(BytesRef.EMPTY_BYTES);
+        for (int i = 0; i < topDocs.totalHits.value; i++) {
+            final BytesRef order = (BytesRef) ((FieldDoc) topDocs.scoreDocs[i]).fields[0];
+            assertTrue(order.compareTo(low) >= 0);
             low = order;
         }
     }
@@ -223,6 +240,7 @@ public class FDBIndexReaderWriterTest extends BaseFDBTest {
         // For sorting
         result.add(new DoubleDocValuesField("double-sort", random.nextDouble()));
         result.add(new NumericDocValuesField("long-sort", random.nextLong()));
+        result.add(new BinaryDocValuesField("str-sort", new BytesRef(RandomStringUtils.randomAlphabetic(3,  10))));
 
         // For querying
         result.add(new FDBNumericPoint("double-pt", 5.5));

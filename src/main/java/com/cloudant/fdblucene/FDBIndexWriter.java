@@ -340,13 +340,20 @@ public final class FDBIndexWriter {
             final IndexableField field,
             final Undo undo) {
         switch (dvType) {
-        case NUMERIC:
+        case NUMERIC: {
             final byte[] key = FDBAccess.numericDocValuesKey(index, fieldName, docID);
             txn.set(key, ByteArrayUtil.encodeInt(field.numericValue().longValue()));
             undo.clear(key);
             break;
+        }
+        case BINARY: {
+            final byte[] key = FDBAccess.binaryDocValuesKey(index, fieldName, docID);
+            txn.set(key, Utils.toBytes(field.binaryValue()));
+            undo.clear(key);
+            break;
+        }
         default:
-            throw new IllegalArgumentException("non-numeric DocValue not supported");
+            throw new IllegalArgumentException("DocValue of type '" + dvType + "' not supported");
         }
     }
 
