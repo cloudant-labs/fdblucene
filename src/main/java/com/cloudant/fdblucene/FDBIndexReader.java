@@ -48,7 +48,7 @@ import com.apple.foundationdb.tuple.Tuple;
 
 public final class FDBIndexReader extends LeafReader {
 
-    private static final LeafMetaData LEAF_META_DATA = new LeafMetaData(8, Version.LUCENE_8_1_0, null);
+    private static final LeafMetaData LEAF_META_DATA = new LeafMetaData(8, Version.LUCENE_8_3_0, null);
 
     private final Subspace index;
 
