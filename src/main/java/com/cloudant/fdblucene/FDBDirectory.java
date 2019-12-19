@@ -325,7 +325,7 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public Lock obtainLock(final String name) throws IOException {
-        return FDBLock.obtain(this, uuid, name);
+        return FDBLock.obtain(txc, subspace, uuid, name);
     }
 
     /**
@@ -367,6 +367,10 @@ public final class FDBDirectory extends Directory {
             txn.set(destKey, meta.pack());
             return null;
         });
+    }
+
+    public void unlock(final String name) {
+        FDBLock.unlock(txc, subspace, name);
     }
 
     /**

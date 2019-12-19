@@ -16,39 +16,50 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
-import java.nio.file.FileAlreadyExistsException;
+import java.util.Arrays;
 import java.util.UUID;
 
 import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.LockObtainFailedException;
 
+import com.apple.foundationdb.TransactionContext;
+import com.apple.foundationdb.subspace.Subspace;
+import com.apple.foundationdb.tuple.Tuple;
+
 final class FDBLock extends Lock {
 
-    private final Directory dir;
-    private final UUID uuid;
+    private final TransactionContext txc;
+    private final byte[] uuid;
     private final String name;
+    private final byte[] key;
     private boolean closed = false;
 
-    public static Lock obtain(final Directory dir, final UUID uuid, final String name) throws IOException {
-        try {
-            try (final IndexOutput output = dir.createOutput(name, null)) {
-                output.writeLong(uuid.getMostSignificantBits());
-                output.writeLong(uuid.getLeastSignificantBits());
-            }
-            return new FDBLock(dir, uuid, name);
-        } catch (FileAlreadyExistsException e) {
-            throw new LockObtainFailedException("Lock for " + name + " already obtained.", e);
+    public static Lock obtain(final TransactionContext txc, final Subspace subspace, final UUID uuid, final String name)
+            throws IOException {
+        final byte[] key = lockKey(subspace, name);
+        final boolean obtained = txc.run(txn -> {
+            return txn.get(key).thenApply(value -> {
+                if (value == null) {
+                    txn.set(key, Utils.toBytes(uuid));
+                    return true;
+                }
+                return false;
+            }).join();
+        });
+
+        if (obtained) {
+            return new FDBLock(txc, key, uuid, name);
+        } else {
+            throw new LockObtainFailedException("Lock for " + name + " already obtained.");
         }
     }
 
-    FDBLock(final Directory dir, final UUID uuid, final String name) {
-        this.dir = dir;
-        this.uuid = uuid;
+    FDBLock(final TransactionContext txc, final byte[] key, final UUID uuid, final String name) {
+        this.txc = txc;
+        this.uuid = Utils.toBytes(uuid);
         this.name = name;
+        this.key = key;
     }
 
     @Override
@@ -58,10 +69,16 @@ final class FDBLock extends Lock {
         }
 
         try {
-            ensureValid();
-            dir.deleteFile(name);
-        }
-        finally {
+            txc.run(txn -> {
+                return txn.get(key).thenApply(value -> {
+                    if (value != null && Arrays.equals(uuid, value)) {
+                        txn.clear(key);
+                        return true;
+                    }
+                    return false;
+                }).join();
+            });
+        } finally {
             closed = true;
         }
     }
@@ -72,21 +89,32 @@ final class FDBLock extends Lock {
             throw new AlreadyClosedException(name + " already closed.");
         }
 
-        try (final IndexInput input = dir.openInput(name, null)) {
-            final long msb = input.readLong();
-            final long lsb = input.readLong();
-            final UUID current = new UUID(msb, lsb);
-            if (!this.uuid.equals(current)) {
-                throw new AlreadyClosedException(name + " no longer valid.");
-            }
-        } catch (final IOException e) {
+        final boolean valid = txc.read(txn -> {
+            return txn.get(key).thenApply(value -> {
+                return value != null && Arrays.equals(uuid, value);
+            }).join();
+        });
+
+        if (!valid) {
             throw new AlreadyClosedException(name + " no longer valid.");
         }
+    }
+
+    public static void unlock(final TransactionContext txc, final Subspace subspace, final String name) {
+        final byte[] key = lockKey(subspace, name);
+        txc.run(txn -> {
+            txn.clear(key);
+            return null;
+        });
     }
 
     @Override
     public String toString() {
         return String.format("FDBLock(name=%s)", name);
+    }
+
+    private static byte[] lockKey(final Subspace subspace, final String name) {
+        return subspace.pack(Tuple.from("_lock", name));
     }
 
 }
