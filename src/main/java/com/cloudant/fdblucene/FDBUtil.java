@@ -61,15 +61,6 @@ final class FDBUtil {
         return result;
     }
 
-    static byte[] encodeUUID(final UUID v) {
-        return Tuple.from(v.getMostSignificantBits(), v.getLeastSignificantBits()).pack();
-    }
-
-    static UUID decodeUUID(final byte[] v) {
-        final Tuple t = Tuple.fromBytes(v);
-        return new UUID(t.getLong(0), t.getLong(1));
-    }
-
     static int posToOffset(final long pos, final int pageSize) {
         return (int) (pos % pageSize);
     }

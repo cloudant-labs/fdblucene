@@ -15,6 +15,9 @@
  *******************************************************************************/
 package com.cloudant.fdblucene;
 
+import java.nio.ByteBuffer;
+import java.util.UUID;
+
 import org.apache.lucene.util.BytesRef;
 
 import com.apple.foundationdb.Transaction;
@@ -34,6 +37,13 @@ class Utils {
         final byte[] result = new byte[ref.length];
         System.arraycopy(ref.bytes, ref.offset, result, 0, ref.length);
         return result;
+    }
+
+    static byte[] toBytes(final UUID uuid) {
+        final ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return bb.array();
     }
 
     static int getOrDefault(final TransactionContext txc, final byte[] key, final int defaultValue) {

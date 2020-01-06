@@ -109,6 +109,21 @@ public final class FDBDirectory extends Directory {
      *
      * @param txc      The {@link TransactionContext} that will be used for all
      *                 transactions. This is typically a {@link Database}.
+     * @param subspace The {@link Subspace} to create all key-value entries under.
+     *                 This is useful if using Lucene indexes in a wider context.
+     * @return an instance of FDBDirectory
+     * @throws IllegalArgumentException if txnSize is smaller than pageSize.
+     */
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace) {
+        return open(txc, subspace, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    }
+
+    /**
+     * Opens a Directory (or creates an empty one if there is no existing directory)
+     * at the provided {@code path}.
+     *
+     * @param txc      The {@link TransactionContext} that will be used for all
+     *                 transactions. This is typically a {@link Database}.
      * @param path     The (virtual) path where this directory is located. This
      *                 option is provided for compatibility with the Lucene test
      *                 framework. No data will be written to this path of the
@@ -122,10 +137,7 @@ public final class FDBDirectory extends Directory {
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(
-            final TransactionContext txc,
-            final Path path,
-            final int pageSize,
+    public static FDBDirectory open(final TransactionContext txc, final Path path, final int pageSize,
             final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
         final DirectorySubspace dir = dirLayer.createOrOpen(txc, pathAsList(path)).join();
@@ -149,10 +161,7 @@ public final class FDBDirectory extends Directory {
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(
-            final TransactionContext txc,
-            final Subspace subspace,
-            final int pageSize,
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final int pageSize,
             final int txnSize) {
         return new FDBDirectory(txc, subspace, pageSize, txnSize);
     }
@@ -316,7 +325,7 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public Lock obtainLock(final String name) throws IOException {
-        return FDBLock.obtain(this, uuid, name);
+        return FDBLock.obtain(txc, subspace, uuid, name);
     }
 
     /**
@@ -358,6 +367,10 @@ public final class FDBDirectory extends Directory {
             txn.set(destKey, meta.pack());
             return null;
         });
+    }
+
+    public void unlock(final String name) {
+        FDBLock.unlock(txc, subspace, name);
     }
 
     /**
