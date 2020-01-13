@@ -209,7 +209,7 @@ public final class FDBDirectory extends Directory {
      */
     public void delete() {
         txc.run(txn -> {
-            Utils.trace(txn, "FDBDirectory.delete");
+            Utils.trace(txn, "FDBDirectory.delete(%s)", uuid);
             txn.clear(subspace.range());
             return null;
         });
@@ -237,7 +237,7 @@ public final class FDBDirectory extends Directory {
         final byte[] key = metaKey(name);
 
         final long fileNumber = txc.run(txn -> {
-            Utils.trace(txn, "createOutput(%s)", name);
+            Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
             final byte[] value = txn.get(key).join();
             if (value != null) {
                 return -1L;
@@ -281,7 +281,7 @@ public final class FDBDirectory extends Directory {
     @Override
     public void deleteFile(final String name) throws IOException {
         final boolean deleted = txc.run(txn -> {
-            Utils.trace(txn, "deleteFile(%s)", name);
+            Utils.trace(txn, "FDBDirectory.deleteFile(%s)", name);
             final long fileNumber = fileNumber(txn, name);
             if (fileNumber != -1L) {
                 txn.clear(metaKey(name));
@@ -313,7 +313,7 @@ public final class FDBDirectory extends Directory {
     public String[] listAll() throws IOException {
         final Range metaRange = metaRange();
         final List<KeyValue> keyvalues = txc.read(txn -> {
-            Utils.trace(txn, "listAll");
+            Utils.trace(txn, "FDBDirectory.listAll(%s)", uuid);
             return txn.getRange(metaRange).asList().join();
         });
 
@@ -364,7 +364,7 @@ public final class FDBDirectory extends Directory {
         final byte[] destKey = metaKey(dest);
 
         txc.run(txn -> {
-            Utils.trace(txn, "rename(%s,%s)", source, dest);
+            Utils.trace(txn, "FDBDirectory.rename(%s,%s)", source, dest);
             final FileMetaData meta = meta(txn, source);
             txn.clear(sourceKey);
             txn.set(destKey, meta.pack());
@@ -424,7 +424,7 @@ public final class FDBDirectory extends Directory {
     private int getOrSetPageSize(final TransactionContext txc, final Subspace subspace, final int pageSize) {
         final byte[] key = subspace.pack(Tuple.from("_pagesize"));
         return txc.run(txn -> {
-            Utils.trace(txn, "getOrSetPageSize");
+            Utils.trace(txn, "FDBDirectory.getOrSetPageSize(%s)", uuid);
             final byte[] pageSizeInFDB = txn.get(key).join();
             if (pageSizeInFDB == null) {
                 txn.set(key, FDBUtil.encodeInt(pageSize));
