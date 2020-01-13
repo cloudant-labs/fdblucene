@@ -3,6 +3,30 @@
 FDBLucene is a new project to store Lucene indexes into FoundationDB
 while providing high performance for both indexing and searching.
 
+## Build
+
+Requires Apache Maven to build:
+
+https://maven.apache.org/
+
+Run `mvn clean install -DskipTests`
+
+
+## Tests
+
+Requires a local FoundationDB cluster
+
+https://www.foundationdb.org/
+
+to be installed and running.
+
+Run `mvn test` to run the unit tests included in `src/test`.
+
+## Approaches
+
+This repository contains two different approaches to storing Lucene indexes
+in FoundationDB. At this time the FDBDirectory approach is active candidate.
+
 FDBIndexWriter / FDBIndexReader
 ===============================
 
