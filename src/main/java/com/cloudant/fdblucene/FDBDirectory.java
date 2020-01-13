@@ -35,6 +35,8 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
 
+import com.cloudant.fdblucene.Utils;
+
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
@@ -187,6 +189,7 @@ public final class FDBDirectory extends Directory {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
+        this.uuid = UUID.randomUUID();
         this.pageSize = getOrSetPageSize(txc, subspace, pageSize);
         this.txnSize = txnSize;
 
@@ -194,7 +197,6 @@ public final class FDBDirectory extends Directory {
             throw new IllegalArgumentException("txnSize cannot be smaller than pageSize");
         }
 
-        this.uuid = UUID.randomUUID();
         this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
@@ -207,6 +209,7 @@ public final class FDBDirectory extends Directory {
      */
     public void delete() {
         txc.run(txn -> {
+            Utils.trace(txn, "FDBDirectory.delete(%s)", uuid);
             txn.clear(subspace.range());
             return null;
         });
@@ -234,7 +237,7 @@ public final class FDBDirectory extends Directory {
         final byte[] key = metaKey(name);
 
         final long fileNumber = txc.run(txn -> {
-            txn.options().setTransactionLoggingEnable(String.format("createOutput(%s)", name));
+            Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
             final byte[] value = txn.get(key).join();
             if (value != null) {
                 return -1L;
@@ -278,7 +281,7 @@ public final class FDBDirectory extends Directory {
     @Override
     public void deleteFile(final String name) throws IOException {
         final boolean deleted = txc.run(txn -> {
-            txn.options().setTransactionLoggingEnable(String.format("deleteFile(%s)", name));
+            Utils.trace(txn, "FDBDirectory.deleteFile(%s)", name);
             final long fileNumber = fileNumber(txn, name);
             if (fileNumber != -1L) {
                 txn.clear(metaKey(name));
@@ -310,7 +313,7 @@ public final class FDBDirectory extends Directory {
     public String[] listAll() throws IOException {
         final Range metaRange = metaRange();
         final List<KeyValue> keyvalues = txc.read(txn -> {
-            txn.options().setTransactionLoggingEnable("listAll");
+            Utils.trace(txn, "FDBDirectory.listAll(%s)", uuid);
             return txn.getRange(metaRange).asList().join();
         });
 
@@ -361,7 +364,7 @@ public final class FDBDirectory extends Directory {
         final byte[] destKey = metaKey(dest);
 
         txc.run(txn -> {
-            txn.options().setTransactionLoggingEnable(String.format("rename(%s,%s)", source, dest));
+            Utils.trace(txn, "FDBDirectory.rename(%s,%s)", source, dest);
             final FileMetaData meta = meta(txn, source);
             txn.clear(sourceKey);
             txn.set(destKey, meta.pack());
@@ -421,6 +424,7 @@ public final class FDBDirectory extends Directory {
     private int getOrSetPageSize(final TransactionContext txc, final Subspace subspace, final int pageSize) {
         final byte[] key = subspace.pack(Tuple.from("_pagesize"));
         return txc.run(txn -> {
+            Utils.trace(txn, "FDBDirectory.getOrSetPageSize(%s)", uuid);
             final byte[] pageSizeInFDB = txn.get(key).join();
             if (pageSizeInFDB == null) {
                 txn.set(key, FDBUtil.encodeInt(pageSize));

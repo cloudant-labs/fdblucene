@@ -22,6 +22,8 @@ import java.util.zip.CRC32;
 
 import org.apache.lucene.store.IndexOutput;
 
+import com.cloudant.fdblucene.Utils;
+
 import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.async.AsyncUtil;
@@ -98,7 +100,7 @@ public final class FDBIndexOutput extends IndexOutput {
         lastFlushFuture.join();
         txc.run(txn -> {
             readVersionCache.setReadVersion(txn);
-            txn.options().setTransactionLoggingEnable(String.format("%s,out,close,%d", getName(), pointer));
+            Utils.trace(txn, "FDBIndexOutput.close(%s,%d)", getName(), pointer);
             flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             txn.options().setNextWriteNoWriteConflictRange();
 
@@ -153,7 +155,7 @@ public final class FDBIndexOutput extends IndexOutput {
 
         lastFlushFuture = txc.runAsync(txn -> {
             readVersionCache.setReadVersion(txn);
-            txn.options().setTransactionLoggingEnable(String.format("%s,out,flush,%d", getName(), pointer));
+            Utils.trace(txn, "FDBIndexOutput.flushTxnBuffer(%s, %d)", getName(), pointer);
             applyIfExists(txn, value -> {
                 flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             });

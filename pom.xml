@@ -79,7 +79,6 @@
         <version>3.0.0-M3</version>
         <configuration>
           <environmentVariables>
-            <FDB_NETWORK_OPTION_TRACE_ENABLE></FDB_NETWORK_OPTION_TRACE_ENABLE>
           </environmentVariables>
           <argLine>-server -Xmx2G</argLine>
         </configuration>
