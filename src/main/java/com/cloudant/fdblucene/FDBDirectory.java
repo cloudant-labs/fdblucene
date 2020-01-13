@@ -189,6 +189,7 @@ public final class FDBDirectory extends Directory {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
+        this.uuid = UUID.randomUUID();
         this.pageSize = getOrSetPageSize(txc, subspace, pageSize);
         this.txnSize = txnSize;
 
@@ -196,7 +197,6 @@ public final class FDBDirectory extends Directory {
             throw new IllegalArgumentException("txnSize cannot be smaller than pageSize");
         }
 
-        this.uuid = UUID.randomUUID();
         this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
