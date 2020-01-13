@@ -23,6 +23,8 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.LockObtainFailedException;
 
+import com.cloudant.fdblucene.Utils;
+
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.Tuple;
@@ -39,6 +41,7 @@ final class FDBLock extends Lock {
             throws IOException {
         final byte[] key = lockKey(subspace, name);
         final boolean obtained = txc.run(txn -> {
+            Utils.trace(txn, "obtain(%s)", name);
             return txn.get(key).thenApply(value -> {
                 if (value == null) {
                     txn.set(key, Utils.toBytes(uuid));
@@ -70,6 +73,7 @@ final class FDBLock extends Lock {
 
         try {
             txc.run(txn -> {
+                Utils.trace(txn, "FDBLock.close(%s)", this.name);
                 return txn.get(key).thenApply(value -> {
                     if (value != null && Arrays.equals(uuid, value)) {
                         txn.clear(key);
@@ -90,6 +94,7 @@ final class FDBLock extends Lock {
         }
 
         final boolean valid = txc.read(txn -> {
+            Utils.trace(txn, "FDBLock.ensureValid(%s)", name);
             return txn.get(key).thenApply(value -> {
                 return value != null && Arrays.equals(uuid, value);
             }).join();
@@ -103,6 +108,7 @@ final class FDBLock extends Lock {
     public static void unlock(final TransactionContext txc, final Subspace subspace, final String name) {
         final byte[] key = lockKey(subspace, name);
         txc.run(txn -> {
+            Utils.trace(txn, "FDBLock.unlock(%s)", name);
             txn.clear(key);
             return null;
         });
