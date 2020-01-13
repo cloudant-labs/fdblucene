@@ -209,6 +209,7 @@ public final class FDBDirectory extends Directory {
      */
     public void delete() {
         txc.run(txn -> {
+            Utils.trace(txn, "FDBDirectory.delete");
             txn.clear(subspace.range());
             return null;
         });
@@ -423,6 +424,7 @@ public final class FDBDirectory extends Directory {
     private int getOrSetPageSize(final TransactionContext txc, final Subspace subspace, final int pageSize) {
         final byte[] key = subspace.pack(Tuple.from("_pagesize"));
         return txc.run(txn -> {
+            Utils.trace(txn, "getOrSetPageSize");
             final byte[] pageSizeInFDB = txn.get(key).join();
             if (pageSizeInFDB == null) {
                 txn.set(key, FDBUtil.encodeInt(pageSize));
