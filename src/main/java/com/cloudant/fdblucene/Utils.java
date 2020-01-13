@@ -20,13 +20,13 @@ import java.util.UUID;
 
 import org.apache.lucene.util.BytesRef;
 
-import com.apple.foundationdb.Transaction;
+import com.apple.foundationdb.ReadTransaction;
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.tuple.ByteArrayUtil;
 
 class Utils {
 
-    static void trace(final Transaction txn, final String format, final Object... args) {
+    static void trace(final ReadTransaction txn, final String format, final Object... args) {
         if (System.getenv("FDB_NETWORK_OPTION_TRACE_ENABLE") != null) {
             final String str = String.format(format, args);
             txn.options().setTransactionLoggingEnable(str);

@@ -22,6 +22,8 @@ import org.apache.commons.jcs.JCS;
 import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.IndexInput;
 
+import com.cloudant.fdblucene.Utils;
+
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.subspace.Subspace;
 
@@ -135,7 +137,7 @@ public final class FDBIndexInput extends IndexInput {
                 final byte[] key = pageKey(currentPage);
                 page = txc.run(txn -> {
                     readVersionCache.setReadVersion(txn);
-                    txn.options().setTransactionLoggingEnable(String.format("%s,in,loadPage,%d", name, offset + pointer));
+                    Utils.trace(txn, "%s,in,loadPage,%d", name, offset + pointer);
                     return txn.get(key).join();
                 });
                 pageCache.putInGroup(currentPage, name, page);
