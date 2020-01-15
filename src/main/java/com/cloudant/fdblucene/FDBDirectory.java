@@ -217,7 +217,7 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public void close() throws IOException {
-        pageCache.clear();
+        pageCache.dispose();
         closed = true;
     }
 
