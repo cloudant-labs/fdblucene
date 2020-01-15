@@ -40,6 +40,7 @@ import com.cloudant.fdblucene.Utils;
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
 import com.apple.foundationdb.Range;
+import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.directory.DirectoryLayer;
 import com.apple.foundationdb.directory.DirectorySubspace;
@@ -406,19 +407,17 @@ public final class FDBDirectory extends Directory {
         return subspace.get(fileNumber);
     }
 
-    private long getAndIncrement(final TransactionContext txc, final String counterName) {
+    private long getAndIncrement(final Transaction txn, final String counterName) {
         final byte[] key = subspace.pack(Tuple.from("_counter", counterName));
-        return txc.run(txn -> {
-            final byte[] value = txn.get(key).join();
-            if (value == null) {
-                txn.set(key, FDBUtil.encodeLong(1L));
-                return 0L;
-            } else {
-                final long result = FDBUtil.decodeLong(value);
-                txn.set(key, FDBUtil.encodeLong(result + 1L));
-                return result;
-            }
-        });
+        final byte[] value = txn.get(key).join();
+        if (value == null) {
+            txn.set(key, FDBUtil.encodeLong(1L));
+            return 0L;
+        } else {
+            final long result = FDBUtil.decodeLong(value);
+            txn.set(key, FDBUtil.encodeLong(result + 1L));
+            return result;
+        }
     }
 
     private int getOrSetPageSize(final TransactionContext txc, final Subspace subspace, final int pageSize) {
