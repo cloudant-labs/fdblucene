@@ -64,7 +64,7 @@ public final class FDBIndexInput extends IndexInput {
 
     @Override
     public void close() throws IOException {
-        // empty.
+        pageCache.invalidateGroup(name);
     }
 
     @Override
