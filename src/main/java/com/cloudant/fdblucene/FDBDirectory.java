@@ -373,7 +373,7 @@ public final class FDBDirectory extends Directory {
     }
 
     public void unlock(final String name) {
-        FDBLock.unlock(txc, subspace, name);
+        FDBLock.unlock(txc, subspace, uuid, name);
     }
 
     /**
