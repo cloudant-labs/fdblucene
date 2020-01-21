@@ -57,23 +57,23 @@ public final class FDBDirectory extends Directory {
 
         private final Tuple asTuple;
 
-        public FileMetaData(final long fileNumber, final long fileLength) {
-            this.asTuple = Tuple.from(fileNumber, fileLength);
+        private FileMetaData(final String string, final long fileLength) {
+            this.asTuple = Tuple.from(string, fileLength);
         }
 
-        public FileMetaData(final Tuple tuple) {
+        private FileMetaData(final Tuple tuple) {
             if (tuple.size() != 2) {
                 throw new IllegalArgumentException(tuple + " is not a file metadata tuple");
             }
             this.asTuple = tuple;
         }
 
-        public FileMetaData(final byte[] bytes) {
+        private FileMetaData(final byte[] bytes) {
             this(Tuple.fromBytes(bytes));
         }
 
-        public long getFileNumber() {
-            return asTuple.getLong(0);
+        public String getFileNumber() {
+            return asTuple.getString(0);
         }
 
         public long getFileLength() {
@@ -235,25 +235,28 @@ public final class FDBDirectory extends Directory {
         }
 
         final byte[] key = metaKey(name);
+        final byte[] counterKey = subspace.pack(Tuple.from("_counter", String.format("_fn_%s", name)));
 
-        final long fileNumber = txc.run(txn -> {
+        final String fileNumber = txc.run(txn -> {
             Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
+
             final byte[] value = txn.get(key).join();
             if (value != null) {
-                return -1L;
+                return null;
             }
 
-            final long result = getAndIncrement(txn, "_fn");
-            txn.set(key, new FileMetaData(result, 0L).pack());
-            return result;
+            final long result = getAndIncrement(txn, counterKey);
+            final String fileNum = String.format("%s_%d", name, result);
+            txn.set(key, new FileMetaData(fileNum, 0L).pack());
+            return fileNum;
         });
 
-        if (fileNumber == -1L) {
+        if (fileNumber == null) {
             throw new FileAlreadyExistsException(name + " already exists.");
         }
 
-        final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
-        return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
+        final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%s)", name, fileNumber);
+        return new FDBIndexOutput(this, resourceDescription, name, txc, key, fileSubspace(fileNumber),
                 pageSize, txnSize);
     }
 
@@ -282,8 +285,8 @@ public final class FDBDirectory extends Directory {
     public void deleteFile(final String name) throws IOException {
         final boolean deleted = txc.run(txn -> {
             Utils.trace(txn, "FDBDirectory.deleteFile(%s)", name);
-            final long fileNumber = fileNumber(txn, name);
-            if (fileNumber != -1L) {
+            final String fileNumber = fileNumber(txn, name);
+            if (fileNumber != null) {
                 txn.clear(metaKey(name));
                 txn.clear(subspace.get(fileNumber).range());
                 return true;
@@ -350,7 +353,7 @@ public final class FDBDirectory extends Directory {
         }
 
         final String resourceDescription = String
-                .format("FDBIndexInput(name=%s,number=%d)", name, meta.getFileNumber());
+                .format("FDBIndexInput(name=%s,number=%s)", name, meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
                 meta.getFileLength(), pageSize, pageCache);
     }
@@ -402,12 +405,11 @@ public final class FDBDirectory extends Directory {
         return String.format("FDBDirectory(subspace=%s,uuid=%s)", subspace, uuid);
     }
 
-    private Subspace fileSubspace(final long fileNumber) {
+    private Subspace fileSubspace(final String fileNumber) {
         return subspace.get(fileNumber);
     }
 
-    private long getAndIncrement(final TransactionContext txc, final String counterName) {
-        final byte[] key = subspace.pack(Tuple.from("_counter", counterName));
+    private long getAndIncrement(final TransactionContext txc, final byte[] key) {
         return txc.run(txn -> {
             final byte[] value = txn.get(key).join();
             if (value == null) {
@@ -435,10 +437,10 @@ public final class FDBDirectory extends Directory {
         });
     }
 
-    private long fileNumber(final TransactionContext txc, final String name) {
+    private String fileNumber(final TransactionContext txc, final String name) {
         final FileMetaData meta = meta(txc, name);
         if (meta == null) {
-            return -1L;
+            return null;
         }
         return meta.getFileNumber();
     }
