@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.UUID;
 
@@ -36,6 +38,7 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
 
 import com.cloudant.fdblucene.Utils;
+import com.cloudant.fdblucene.FDBUtil;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
@@ -45,6 +48,8 @@ import com.apple.foundationdb.directory.DirectoryLayer;
 import com.apple.foundationdb.directory.DirectorySubspace;
 import com.apple.foundationdb.subspace.Subspace;
 import com.apple.foundationdb.tuple.Tuple;
+
+import org.apache.commons.lang3.RandomStringUtils;
 
 /**
  * A concrete implementation of {@link Directory} that reads and writes all
@@ -67,8 +72,8 @@ public final class FDBDirectory extends Directory {
             }
             this.asTuple = tuple;
         }
-
-        private FileMetaData(final byte[] bytes) {
+        //package private
+        FileMetaData(final byte[] bytes) {
             this(Tuple.fromBytes(bytes));
         }
 
@@ -234,29 +239,51 @@ public final class FDBDirectory extends Directory {
             throw new AlreadyClosedException(this + " is closed");
         }
 
-        final byte[] key = metaKey(name);
-        final byte[] counterKey = subspace.pack(Tuple.from("_counter", String.format("_fn_%s", name)));
+        final byte[] metaDataKey = metaKey(name);
+        String fileNumber = null;
+        Boolean fileNameTaken = false;
 
-        final String fileNumber = txc.run(txn -> {
-            Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
+        // Find a free data path to claim with a unique data-identifier
+        // This decouples the data storage path from the "filename" that Lucene manages
+        while (fileNumber == null && !fileNameTaken) {
+            // TODO add timeout
+            // TODO find correct randomness level
+            final String maybeFileNumber = String.format("%s_%s", RandomStringUtils.random(8, true, true), name); // Grab a byte of random
+            final Subspace fileSubSpace = fileSubspace(maybeFileNumber);
+            final byte[] dataCanaryKey = fileSubSpace.pack("exists");
 
-            final byte[] value = txn.get(key).join();
-            if (value != null) {
-                return null;
+            final Map status = txc.run(txn -> {
+                final Map creationStatus = new HashMap();
+                creationStatus.put("fileNumber", null);
+                creationStatus.put("fileNameTaken", false);
+
+                Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
+
+                // First check if the desired filename already exists via metadata -- fail fast if so!
+                final byte[] metaValue = txn.get(metaDataKey).join();
+                if (metaValue != null) {
+                    creationStatus.put("fileNameTaken", true);
+                    return creationStatus;
+                }
+
+                final byte[] dataPathCanary = txn.get(dataCanaryKey).join();
+                if (dataPathCanary == null) {
+                    txn.set(dataCanaryKey, FDBUtil.encodeInt(1));
+                    txn.set(metaDataKey, new FileMetaData(maybeFileNumber, 0L).pack());
+                    creationStatus.put("fileNumber", maybeFileNumber);
+                }
+                return creationStatus;
+            });
+            fileNumber = (String) status.get("fileNumber");
+            fileNameTaken = (Boolean) status.get("fileNameTaken");
+
+            if (fileNameTaken) {
+                throw new FileAlreadyExistsException(name + " already exists.");
             }
-
-            final long result = getAndIncrement(txn, counterKey);
-            final String fileNum = String.format("%s_%d", name, result);
-            txn.set(key, new FileMetaData(fileNum, 0L).pack());
-            return fileNum;
-        });
-
-        if (fileNumber == null) {
-            throw new FileAlreadyExistsException(name + " already exists.");
         }
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%s)", name, fileNumber);
-        return new FDBIndexOutput(this, resourceDescription, name, txc, key, fileSubspace(fileNumber),
+        return new FDBIndexOutput(this, resourceDescription, name, txc, metaDataKey, fileSubspace(fileNumber),
                 pageSize, txnSize);
     }
 
