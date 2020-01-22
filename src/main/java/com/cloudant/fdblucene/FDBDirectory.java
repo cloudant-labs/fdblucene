@@ -249,7 +249,7 @@ public final class FDBDirectory extends Directory {
         });
 
         if (fileNumber == -1L) {
-            throw new FileAlreadyExistsException(name + " already exists.");
+            throw new FileAlreadyExistsException(name + " already exists");
         }
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
@@ -303,7 +303,7 @@ public final class FDBDirectory extends Directory {
         final FileMetaData meta = meta(txc, name);
 
         if (meta == null) {
-            throw new FileNotFoundException(name + " does not exist.");
+            throw new FileNotFoundException(name + " does not exist");
         }
 
         return meta.getFileLength();
@@ -346,7 +346,7 @@ public final class FDBDirectory extends Directory {
         final FileMetaData meta = meta(txc, name);
 
         if (meta == null) {
-            throw new FileNotFoundException(name + " does not exist.");
+            throw new FileNotFoundException(name + " does not exist");
         }
 
         final String resourceDescription = String

@@ -54,7 +54,7 @@ final class FDBLock extends Lock {
         if (obtained) {
             return new FDBLock(txc, key, uuid, name);
         } else {
-            throw new LockObtainFailedException("Lock for " + name + " already obtained.");
+            throw new LockObtainFailedException("Lock for " + name + " already obtained");
         }
     }
 
@@ -90,7 +90,7 @@ final class FDBLock extends Lock {
     @Override
     public void ensureValid() throws IOException {
         if (closed) {
-            throw new AlreadyClosedException(name + " already closed.");
+            throw new AlreadyClosedException(name + " already closed");
         }
 
         final boolean valid = txc.read(txn -> {
@@ -101,7 +101,7 @@ final class FDBLock extends Lock {
         });
 
         if (!valid) {
-            throw new AlreadyClosedException(name + " no longer valid.");
+            throw new AlreadyClosedException(name + " no longer valid");
         }
     }
 
