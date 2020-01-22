@@ -26,8 +26,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import org.apache.commons.jcs.JCS;
-import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -183,7 +181,6 @@ public final class FDBDirectory extends Directory {
     private final int txnSize;
 
     private final UUID uuid;
-    private final GroupCacheAccess<Long, byte[]> pageCache;
 
     private FDBDirectory(final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
         this.txc = txc;
@@ -196,8 +193,6 @@ public final class FDBDirectory extends Directory {
         if (this.txnSize < this.pageSize) {
             throw new IllegalArgumentException("txnSize cannot be smaller than pageSize");
         }
-
-        this.pageCache = JCS.getGroupCacheInstance(uuid.toString());
     }
 
     public UUID getUUID() {
@@ -217,7 +212,6 @@ public final class FDBDirectory extends Directory {
 
     @Override
     public void close() throws IOException {
-        pageCache.dispose();
         closed = true;
     }
 
@@ -294,8 +288,6 @@ public final class FDBDirectory extends Directory {
         if (!deleted) {
             throw new FileNotFoundException(name + " does not exist");
         }
-
-        pageCache.invalidateGroup(name);
     }
 
     @Override
@@ -352,7 +344,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String
                 .format("FDBIndexInput(name=%s,number=%d)", name, meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), pageSize, pageCache);
+                meta.getFileLength(), pageSize);
     }
 
     /**

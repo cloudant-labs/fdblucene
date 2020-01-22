@@ -18,8 +18,6 @@ package com.cloudant.fdblucene;
 import java.io.EOFException;
 import java.io.IOException;
 
-import org.apache.commons.jcs.JCS;
-import org.apache.commons.jcs.access.GroupCacheAccess;
 import org.apache.lucene.store.IndexInput;
 
 import com.cloudant.fdblucene.Utils;
@@ -29,8 +27,7 @@ import com.apple.foundationdb.subspace.Subspace;
 
 /**
  * A concrete implementation of {@link IndexInput} that reads {@code pages} from
- * FoundationDB. These pages are cached using {@link JCS} using an ephemeral key
- * that is valid only until {@link FDBDirectory#close()} is called.
+ * FoundationDB.
  */
 public final class FDBIndexInput extends IndexInput {
 
@@ -44,11 +41,9 @@ public final class FDBIndexInput extends IndexInput {
     private final int pageSize;
 
     private final ReadVersionCache readVersionCache;
-    private final GroupCacheAccess<Long, byte[]> pageCache;
 
     FDBIndexInput(final String resourceDescription, final TransactionContext txc, final Subspace subspace,
-            final String name, final long offset, final long length, final int pageSize,
-            final GroupCacheAccess<Long, byte[]> pageCache) {
+            final String name, final long offset, final long length, final int pageSize) {
         super(resourceDescription);
         this.txc = txc;
         this.subspace = subspace;
@@ -59,12 +54,11 @@ public final class FDBIndexInput extends IndexInput {
         pointer = 0L;
         this.pageSize = pageSize;
         this.readVersionCache = new ReadVersionCache();
-        this.pageCache = pageCache;
     }
 
     @Override
     public void close() throws IOException {
-        pageCache.invalidateGroup(name);
+        // empty.
     }
 
     @Override
@@ -126,22 +120,18 @@ public final class FDBIndexInput extends IndexInput {
             throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: " + this.length);
         }
         return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subspace, name, this.offset + offset,
-                length, pageSize, pageCache);
+                length, pageSize);
     }
 
     private void loadPageIfNull() {
         if (page == null) {
             final long currentPage = currentPage();
-            page = pageCache.getFromGroup(currentPage, name);
-            if (page == null) {
-                final byte[] key = pageKey(currentPage);
-                page = txc.run(txn -> {
-                    readVersionCache.setReadVersion(txn);
-                    Utils.trace(txn, "%s,in,loadPage,%d", name, offset + pointer);
-                    return txn.get(key).join();
-                });
-                pageCache.putInGroup(currentPage, name, page);
-            }
+            final byte[] key = pageKey(currentPage);
+            page = txc.run(txn -> {
+                readVersionCache.setReadVersion(txn);
+                Utils.trace(txn, "%s,in,loadPage,%d", name, offset + pointer);
+                return txn.get(key).join();
+            });
         }
     }
 
