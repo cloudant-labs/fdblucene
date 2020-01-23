@@ -32,7 +32,8 @@ import com.apple.foundationdb.tuple.Tuple;
 final class FDBLock extends Lock {
 
     private final TransactionContext txc;
-    private final byte[] uuid;
+    private final byte[] uuidBytes;
+    private final UUID uuid;
     private final String name;
     private final byte[] key;
     private boolean closed = false;
@@ -40,11 +41,12 @@ final class FDBLock extends Lock {
     public static Lock obtain(final TransactionContext txc, final Subspace subspace, final UUID uuid, final String name)
             throws IOException {
         final byte[] key = lockKey(subspace, name);
+        final byte[] uuidBytes = Utils.toBytes(uuid);
         final boolean obtained = txc.run(txn -> {
-            Utils.trace(txn, "obtain(%s)", name);
+            Utils.trace(txn, "obtain(%s,%s)", name, uuid);
             return txn.get(key).thenApply(value -> {
                 if (value == null) {
-                    txn.set(key, Utils.toBytes(uuid));
+                    txn.set(key, uuidBytes);
                     return true;
                 }
                 return false;
@@ -52,15 +54,16 @@ final class FDBLock extends Lock {
         });
 
         if (obtained) {
-            return new FDBLock(txc, key, uuid, name);
+            return new FDBLock(txc, key, uuidBytes, uuid, name);
         } else {
             throw new LockObtainFailedException("Lock for " + name + " already obtained.");
         }
     }
 
-    FDBLock(final TransactionContext txc, final byte[] key, final UUID uuid, final String name) {
+    FDBLock(final TransactionContext txc, final byte[] key, final byte[] uuidBytes, final UUID uuid, final String name) {
         this.txc = txc;
-        this.uuid = Utils.toBytes(uuid);
+        this.uuidBytes = uuidBytes;
+        this.uuid = uuid;
         this.name = name;
         this.key = key;
     }
@@ -73,9 +76,9 @@ final class FDBLock extends Lock {
 
         try {
             txc.run(txn -> {
-                Utils.trace(txn, "FDBLock.close(%s)", this.name);
+                Utils.trace(txn, "FDBLock.close(%s,%s)", name, uuid);
                 return txn.get(key).thenApply(value -> {
-                    if (value != null && Arrays.equals(uuid, value)) {
+                    if (value != null && Arrays.equals(uuidBytes, value)) {
                         txn.clear(key);
                         return true;
                     }
@@ -94,9 +97,9 @@ final class FDBLock extends Lock {
         }
 
         final boolean valid = txc.read(txn -> {
-            Utils.trace(txn, "FDBLock.ensureValid(%s)", name);
+            Utils.trace(txn, "FDBLock.ensureValid(%s,%s)", name, uuid);
             return txn.get(key).thenApply(value -> {
-                return value != null && Arrays.equals(uuid, value);
+                return value != null && Arrays.equals(uuidBytes, value);
             }).join();
         });
 
@@ -105,10 +108,10 @@ final class FDBLock extends Lock {
         }
     }
 
-    public static void unlock(final TransactionContext txc, final Subspace subspace, final String name) {
+    public static void unlock(final TransactionContext txc, final Subspace subspace, final UUID uuid, final String name) {
         final byte[] key = lockKey(subspace, name);
         txc.run(txn -> {
-            Utils.trace(txn, "FDBLock.unlock(%s)", name);
+            Utils.trace(txn, "FDBLock.unlock(%s,%s)", name, uuid);
             txn.clear(key);
             return null;
         });

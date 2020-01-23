@@ -100,7 +100,7 @@ public final class FDBIndexOutput extends IndexOutput {
         lastFlushFuture.join();
         txc.run(txn -> {
             readVersionCache.setReadVersion(txn);
-            Utils.trace(txn, "FDBIndexOutput.close(%s,%d)", getName(), pointer);
+            Utils.trace(txn, "FDBIndexOutput.close(%s,%s,%d)", this.dir.getUUID(), getName(), pointer);
             flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             txn.options().setNextWriteNoWriteConflictRange();
 
@@ -155,7 +155,7 @@ public final class FDBIndexOutput extends IndexOutput {
 
         lastFlushFuture = txc.runAsync(txn -> {
             readVersionCache.setReadVersion(txn);
-            Utils.trace(txn, "FDBIndexOutput.flushTxnBuffer(%s, %d)", getName(), pointer);
+            Utils.trace(txn, "FDBIndexOutput.flushTxnBuffer(%s,%s,%d)", this.dir.getUUID(), getName(), pointer);
             applyIfExists(txn, value -> {
                 flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
             });
