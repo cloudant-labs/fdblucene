@@ -16,10 +16,9 @@
 package com.cloudant.fdblucene;
 
 import java.util.concurrent.TimeUnit;
-
 import com.apple.foundationdb.Transaction;
 
-final class ReadVersionCache {
+final class ReadVersionCache implements Cloneable {
 
     private static final long MAX_AGE = TimeUnit.NANOSECONDS.convert(4, TimeUnit.SECONDS);
 
@@ -44,6 +43,14 @@ final class ReadVersionCache {
         } else {
             txn.setReadVersion(readVersion);
         }
+    }
+
+    public ReadVersionCache clone() {
+      try {
+        return (ReadVersionCache) super.clone();
+      } catch (final CloneNotSupportedException e) {
+        throw new Error("cannot happen!");
+      }
     }
 
 }
