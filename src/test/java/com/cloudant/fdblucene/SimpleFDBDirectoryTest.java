@@ -16,15 +16,12 @@
 package com.cloudant.fdblucene;
 
 import static org.junit.Assert.assertEquals;
-
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-
 import java.util.Arrays;
 import java.util.Collection;
-
-import org.apache.lucene.codecs.lucene80.Lucene80Codec;
+import org.apache.lucene.codecs.lucene84.Lucene84Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
@@ -49,7 +46,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.FDB;
 
@@ -209,7 +205,7 @@ public class SimpleFDBDirectoryTest {
     private IndexWriterConfig indexWriterConfig() {
         final IndexWriterConfig config = new IndexWriterConfig();
         config.setUseCompoundFile(false);
-        config.setCodec(new Lucene80Codec());
+        config.setCodec(new Lucene84Codec());
         return config;
     }
 
