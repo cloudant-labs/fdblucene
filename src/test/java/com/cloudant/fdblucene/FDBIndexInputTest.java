@@ -111,7 +111,7 @@ public class FDBIndexInputTest extends BaseFDBTest {
     @Parameters
     public static Collection<Object[]> data() {
         final Random random = new Random();
-        final Collection<Object[]> result = new LazyCollection<Object[]>(10000) {
+        final Collection<Object[]> result = new LazyCollection<Object[]>(1000) {
 
             @Override
             protected Object[] create() {
