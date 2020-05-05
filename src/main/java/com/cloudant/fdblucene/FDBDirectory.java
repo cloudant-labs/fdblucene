@@ -17,12 +17,11 @@ package com.cloudant.fdblucene;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -30,7 +29,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import javax.crypto.Mac;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -57,16 +58,26 @@ import com.apple.foundationdb.tuple.Tuple;
  */
 public final class FDBDirectory extends Directory {
 
+    private static final SecureRandom RND;
+
+    static {
+        try {
+            RND = SecureRandom.getInstanceStrong();
+        } catch (final NoSuchAlgorithmException e) {
+            throw new Error(e);
+        }
+    }
+
     static class FileMetaData {
 
         private final Tuple asTuple;
 
-        public FileMetaData(final long fileNumber, final long fileLength) {
-            this.asTuple = Tuple.from(fileNumber, fileLength);
+        public FileMetaData(final long fileNumber, final long fileLength, final byte[] wrappedKey) {
+            this.asTuple = Tuple.from(fileNumber, fileLength, wrappedKey);
         }
 
         public FileMetaData(final Tuple tuple) {
-            if (tuple.size() != 2) {
+            if (tuple.size() != 3) {
                 throw new IllegalArgumentException(tuple + " is not a file metadata tuple");
             }
             this.asTuple = tuple;
@@ -84,8 +95,12 @@ public final class FDBDirectory extends Directory {
             return asTuple.getLong(1);
         }
 
+        public byte[] getWrappedKey() {
+            return asTuple.getBytes(2);
+        }
+
         public FileMetaData setFileLength(final long fileLength) {
-            return new FileMetaData(getFileNumber(), fileLength);
+            return new FileMetaData(getFileNumber(), fileLength, getWrappedKey());
         }
 
         public byte[] pack() {
@@ -148,8 +163,7 @@ public final class FDBDirectory extends Directory {
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
     public static FDBDirectory open(final TransactionContext txc, final Path path, final SecretKey secretKey,
-            final int pageSize,
-            final int txnSize) {
+            final int pageSize, final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
         final DirectorySubspace dir = dirLayer.createOrOpen(txc, pathAsList(path)).join();
         return open(txc, dir, secretKey, pageSize, txnSize);
@@ -186,8 +200,6 @@ public final class FDBDirectory extends Directory {
         return result;
     }
 
-    private static final byte[] LABEL = "fdblucene".getBytes(StandardCharsets.US_ASCII);
-
     private final TransactionContext txc;
     private final Subspace subspace;
     private boolean closed;
@@ -198,8 +210,7 @@ public final class FDBDirectory extends Directory {
     private final UUID uuid;
 
     private FDBDirectory(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey,
-            final int pageSize,
-            final int txnSize) {
+            final int pageSize, final int txnSize) {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
@@ -248,6 +259,16 @@ public final class FDBDirectory extends Directory {
 
         final byte[] key = metaKey(name);
 
+        final SecretKey fileKey;
+        final byte[] wrappedKey;
+        if (secretKey != null) {
+            fileKey = newKey();
+            wrappedKey = wrap(secretKey, fileKey);
+        } else {
+            fileKey = null;
+            wrappedKey = null;
+        }
+
         final long fileNumber = txc.run(txn -> {
             Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
             final byte[] value = txn.get(key).join();
@@ -256,7 +277,7 @@ public final class FDBDirectory extends Directory {
             }
 
             final long result = getAndIncrement(txn, "_fn");
-            txn.set(key, new FileMetaData(result, 0L).pack());
+            txn.set(key, new FileMetaData(result, 0L, wrappedKey).pack());
             return result;
         });
 
@@ -266,7 +287,7 @@ public final class FDBDirectory extends Directory {
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
         return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
-                deriveFileKey(name), adjustedPageSize(), txnSize);
+                fileKey, adjustedPageSize(), txnSize);
     }
 
     /**
@@ -362,7 +383,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
                 meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), deriveFileKey(name), adjustedPageSize());
+                meta.getFileLength(), maybeUnwrapKey(meta), adjustedPageSize());
     }
 
     /**
@@ -478,34 +499,42 @@ public final class FDBDirectory extends Directory {
         return Tuple.from("_meta", name);
     }
 
-    // SP 800-108 (HMAC SHA-256 Counter)
-    private SecretKey deriveFileKey(final String filename) throws IOException {
-        if (secretKey == null) {
+    private SecretKey maybeUnwrapKey(final FileMetaData meta) throws IOException {
+        final byte[] wrappedKey = meta.getWrappedKey();
+        if (wrappedKey == null) {
             return null;
         }
+        return unwrap(secretKey, wrappedKey);
+    }
 
-        final Mac mac;
+    private SecretKey newKey() {
+        final byte[] bytes = new byte[32];
+        RND.nextBytes(bytes);
+        return new SecretKeySpec(bytes, "AES");
+    }
+
+    private static byte[] wrap(final SecretKey wrappingKey, final SecretKey keyToWrap) throws IOException {
         try {
-            mac = Mac.getInstance("HmacSHA256");
-            mac.init(secretKey);
-        } catch (InvalidKeyException | NoSuchAlgorithmException e) {
+            final Cipher cipher = Cipher.getInstance("AESWrap");
+            cipher.init(Cipher.WRAP_MODE, wrappingKey);
+            return cipher.wrap(keyToWrap);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException
+                | IllegalBlockSizeException e) {
             throw new IOException(e);
         }
-        // iteration
-        mac.update((byte)1);
-        // label
-        mac.update(LABEL);
-        // separator
-        mac.update((byte)0);
-        // context
-        mac.update(subspace.getKey());
-        mac.update(filename.getBytes(StandardCharsets.UTF_8));
-        // output length (256 bits)
-        mac.update((byte) 1);
-        mac.update((byte) 0);
-
-        return new SecretKeySpec(mac.doFinal(), "AES");
     }
+
+    private static SecretKey unwrap(final SecretKey wrappingKey, final byte[] wrappedKey)
+            throws IOException {
+        try {
+            final Cipher cipher = Cipher.getInstance("AESWrap");
+            cipher.init(Cipher.UNWRAP_MODE, wrappingKey);
+            return (SecretKey) cipher.unwrap(wrappedKey, "AES", Cipher.SECRET_KEY);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException e) {
+            throw new IOException(e);
+        }
+    }
+
 
     // If encryption is set up, subtract the GCM overhead.
     private int adjustedPageSize() {

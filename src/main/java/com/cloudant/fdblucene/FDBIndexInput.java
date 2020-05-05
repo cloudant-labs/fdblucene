@@ -15,6 +15,7 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 
 import javax.crypto.SecretKey;
 
@@ -124,7 +125,18 @@ public class FDBIndexInput extends BufferedIndexInput {
         if (result == null) {
             throw new EOFException("Read past end of file");
         }
-        return result;
+        try {
+            return maybeDecrypt(pageNumber, result);
+        } catch (GeneralSecurityException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private byte[] maybeDecrypt(final long pageNumber, final byte[] ciphertext) throws GeneralSecurityException {
+        if (secretKey == null) {
+            return ciphertext;
+        }
+        return Utils.decrypt(secretKey, pageNumber, ciphertext);
     }
 
     private byte[] pageKey(final long pageNumber) {

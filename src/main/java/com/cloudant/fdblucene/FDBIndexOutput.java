@@ -16,6 +16,7 @@
 package com.cloudant.fdblucene;
 
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.zip.CRC32;
@@ -33,11 +34,12 @@ import com.cloudant.fdblucene.FDBDirectory.FileMetaData;
 public final class FDBIndexOutput extends IndexOutput {
 
     private static void flushTxnBuffer(final Subspace subspace, final Transaction txn, final byte[] txnBuffer,
-            final int txnBufferOffset, final long pointer, final int pageSize) {
+            final int txnBufferOffset, final long pointer, final SecretKey secretKey, final int pageSize) {
         final byte[] fullPage = new byte[pageSize];
         for (int i = 0; i < txnBufferOffset; i += pageSize) {
             final long pos = pointer - txnBufferOffset + i;
-            final byte[] key = pageKey(subspace, pos, pageSize);
+            final long pageNumber = FDBUtil.posToPage(pos, pageSize);
+            final byte[] key = subspace.pack(pageNumber);
             final int flushSize = Math.min(pageSize, txnBufferOffset - i);
             final byte[] bufToFlush;
             if (flushSize == pageSize) {
@@ -47,13 +49,20 @@ public final class FDBIndexOutput extends IndexOutput {
             }
             System.arraycopy(txnBuffer, i, bufToFlush, 0, flushSize);
             txn.options().setNextWriteNoWriteConflictRange();
-            txn.set(key, bufToFlush);
+            try {
+                txn.set(key, maybeEncrypt(secretKey, pageNumber, bufToFlush));
+            } catch (final GeneralSecurityException e) {
+                throw new Error(e);
+            }
         }
     }
 
-    private static byte[] pageKey(final Subspace subspace, final long pos, final int byteSize) {
-        final long currentPage = FDBUtil.posToPage(pos, byteSize);
-        return subspace.pack(currentPage);
+    private static byte[] maybeEncrypt(final SecretKey secretKey, final long pos, final byte[] plaintext)
+            throws GeneralSecurityException {
+        if (secretKey == null) {
+            return plaintext;
+        }
+        return Utils.encrypt(secretKey, pos, plaintext);
     }
 
     private final FDBDirectory dir;
@@ -99,7 +108,7 @@ public final class FDBIndexOutput extends IndexOutput {
         txc.run(txn -> {
             readVersionCache.setReadVersion(txn);
             Utils.trace(txn, "FDBIndexOutput.close(%s,%s,%d)", this.dir.getUUID(), getName(), pointer);
-            flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+            flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, secretKey, pageSize);
             txn.options().setNextWriteNoWriteConflictRange();
 
             setFileLength(txn, pointer);
@@ -155,7 +164,7 @@ public final class FDBIndexOutput extends IndexOutput {
             readVersionCache.setReadVersion(txn);
             Utils.trace(txn, "FDBIndexOutput.flushTxnBuffer(%s,%s,%d)", this.dir.getUUID(), getName(), pointer);
             applyIfExists(txn, value -> {
-                flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, pageSize);
+                flushTxnBuffer(subspace, txn, txnBuffer, txnBufferOffset, pointer, secretKey, pageSize);
             });
             return AsyncUtil.DONE;
         });

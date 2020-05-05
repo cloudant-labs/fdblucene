@@ -16,7 +16,12 @@
 package com.cloudant.fdblucene;
 
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.UUID;
+
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 import org.apache.lucene.util.BytesRef;
 
@@ -56,6 +61,33 @@ class Utils {
         } else {
             return (int) ByteArrayUtil.decodeInt(value);
         }
+    }
+
+    static byte[] encrypt(final SecretKey secretKey, final long pageNumber, final byte[] data)
+            throws GeneralSecurityException {
+        final Cipher result = Cipher.getInstance("AES_256/GCM/NoPadding");
+        result.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(128, iv(pageNumber)));
+        return result.doFinal(data);
+    }
+
+    static byte[] decrypt(final SecretKey secretKey, final long pageNumber, final byte[] data)
+            throws GeneralSecurityException {
+        final Cipher result = Cipher.getInstance("AES_256/GCM/NoPadding");
+        result.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(128, iv(pageNumber)));
+        return result.doFinal(data);
+    }
+
+    private static byte[] iv(final long v) {
+        final byte[] result = new byte[12];
+        result[0] = (byte) (0xff & (v >> 56));
+        result[1] = (byte) (0xff & (v >> 48));
+        result[2] = (byte) (0xff & (v >> 40));
+        result[3] = (byte) (0xff & (v >> 32));
+        result[4] = (byte) (0xff & (v >> 24));
+        result[5] = (byte) (0xff & (v >> 16));
+        result[6] = (byte) (0xff & (v >> 8));
+        result[7] = (byte) (0xff & v);
+        return result;
     }
 
 }
