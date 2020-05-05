@@ -32,13 +32,8 @@ import com.cloudant.fdblucene.FDBDirectory.FileMetaData;
 
 public final class FDBIndexOutput extends IndexOutput {
 
-    private static void flushTxnBuffer(
-            final Subspace subspace,
-            final Transaction txn,
-            final byte[] txnBuffer,
-            final int txnBufferOffset,
-            final long pointer,
-            final int pageSize) {
+    private static void flushTxnBuffer(final Subspace subspace, final Transaction txn, final byte[] txnBuffer,
+            final int txnBufferOffset, final long pointer, final int pageSize) {
         final byte[] fullPage = new byte[pageSize];
         for (int i = 0; i < txnBufferOffset; i += pageSize) {
             final long pos = pointer - txnBufferOffset + i;

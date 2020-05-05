@@ -56,10 +56,7 @@ public class SimpleFDBDirectoryTest {
 
     @Parameters
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][]{
-                {1_000, 100_000},
-                {10_000, 1_000_000},
-                {100_000, 1_000_000}});
+        return Arrays.asList(new Object[][] { { 1_000, 100_000 }, { 10_000, 1_000_000 }, { 100_000, 1_000_000 } });
     }
 
     @BeforeClass

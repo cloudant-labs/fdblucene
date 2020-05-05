@@ -262,8 +262,8 @@ public final class FDBDirectory extends Directory {
             throws IOException {
         while (true) {
             final long number = FDBUtil.RANDOM.nextInt();
-            final String name = String
-                    .format("%s_%s_%s.tmp", prefix, suffix, Long.toString(number, Character.MAX_RADIX));
+            final String name = String.format("%s_%s_%s.tmp", prefix, suffix,
+                    Long.toString(number, Character.MAX_RADIX));
             try {
                 return createOutput(name, context);
             } catch (final FileAlreadyExistsException e) {
@@ -341,8 +341,8 @@ public final class FDBDirectory extends Directory {
             throw new FileNotFoundException(name + " does not exist.");
         }
 
-        final String resourceDescription = String
-                .format("FDBIndexInput(name=%s,number=%d)", name, meta.getFileNumber());
+        final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
+                meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
                 meta.getFileLength(), pageSize);
     }

@@ -46,11 +46,11 @@ final class ReadVersionCache implements Cloneable {
     }
 
     public ReadVersionCache clone() {
-      try {
-        return (ReadVersionCache) super.clone();
-      } catch (final CloneNotSupportedException e) {
-        throw new Error("cannot happen!");
-      }
+        try {
+            return (ReadVersionCache) super.clone();
+        } catch (final CloneNotSupportedException e) {
+            throw new Error("cannot happen!");
+        }
     }
 
 }
