@@ -266,7 +266,7 @@ public final class FDBDirectory extends Directory {
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
         return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
-                deriveFileKey(name), pageSize, txnSize);
+                deriveFileKey(name), adjustedPageSize(), txnSize);
     }
 
     /**
@@ -362,7 +362,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
                 meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), deriveFileKey(name), pageSize);
+                meta.getFileLength(), deriveFileKey(name), adjustedPageSize());
     }
 
     /**
@@ -505,6 +505,11 @@ public final class FDBDirectory extends Directory {
         mac.update((byte) 0);
 
         return new SecretKeySpec(mac.doFinal(), "AES");
+    }
+
+    // If encryption is set up, subtract the GCM overhead.
+    private int adjustedPageSize() {
+        return secretKey == null ? pageSize : pageSize - 16;
     }
 
 }
