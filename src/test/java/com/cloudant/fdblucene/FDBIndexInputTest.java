@@ -141,9 +141,7 @@ public class FDBIndexInputTest extends BaseFDBTest {
     }
 
     @Before
-    public void setup() throws Exception {
-        super.setup();
-
+    public void setupPage() throws Exception {
         final byte[] value = new byte[pageSize];
         for (int i = 0; i < pageCount; i++) {
             final byte[] key = subspace.pack(i);

@@ -23,37 +23,32 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.lucene.store.BaseDirectoryTestCase;
 import org.apache.lucene.store.Directory;
-import org.junit.Before;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class EncryptedFDBDirectoryTest extends BaseDirectoryTestCase {
 
-    private static Database DB;
+    private static Database db;
 
     @BeforeClass
-    public static void setup() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
-
+    public static void setup() throws Exception {
+        db = FDBUtil.getTestDb(true);
     }
 
-    @Before
-    public void clear() {
-        DB.run(txn -> {
-            txn.clear(new byte[0], new byte[] { (byte) 254, (byte) 255, (byte) 255 });
-            return null;
-        });
+    @AfterClass
+    public static void cleanup() {
+        FDBUtil.clear(db);
+        db.close();
     }
 
     @Override
     protected Directory getDirectory(final Path path) throws IOException {
         final SecretKey secretKey = new SecretKeySpec(new byte[32], "AES");
-        return FDBDirectory.open(DB, path, secretKey);
+        return FDBDirectory.open(db, path, secretKey);
     }
 
 }

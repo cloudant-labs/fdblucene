@@ -20,10 +20,10 @@ import java.nio.file.Path;
 
 import org.apache.lucene.store.BaseLockFactoryTestCase;
 import org.apache.lucene.store.Directory;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
@@ -32,9 +32,14 @@ public class FDBLockTest extends BaseLockFactoryTestCase {
     private static Database DB;
 
     @BeforeClass
-    public static void setup() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
+    public static void setup() throws Exception {
+        DB = FDBUtil.getTestDb(true);
+    }
+
+    @AfterClass
+    public static void cleanup() {
+        FDBUtil.clear(DB);
+        DB.close();
     }
 
     @Override

@@ -15,13 +15,29 @@
  *******************************************************************************/
 package com.cloudant.fdblucene;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.ServerSocket;
 import java.security.SecureRandom;
 import java.util.Random;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.function.Function;
 
-import com.apple.foundationdb.tuple.Tuple;
+import com.apple.foundationdb.Database;
+import com.apple.foundationdb.DatabaseOptions;
+import com.apple.foundationdb.FDB;
+import com.apple.foundationdb.ReadTransaction;
+import com.apple.foundationdb.Transaction;
 
 final class FDBUtil {
+
+    static {
+        FDB.selectAPIVersion(600);
+    }
 
     public static final Random RANDOM = new SecureRandom();
 
@@ -68,5 +84,148 @@ final class FDBUtil {
     static long posToPage(final long pos, final int pageSize) {
         return pos / pageSize;
     }
+
+    private static class TestDatabase implements Database {
+
+        private final Process server;
+        private final Database db;
+
+        private TestDatabase(final Process server, final Database db) {
+            this.server = server;
+            this.db = db;
+        }
+
+        public Transaction createTransaction() {
+            return db.createTransaction();
+        }
+
+        public Transaction createTransaction(Executor e) {
+            return db.createTransaction(e);
+        }
+
+        public DatabaseOptions options() {
+            return db.options();
+        }
+
+        public <T> T read(Function<? super ReadTransaction, T> retryable) {
+            return db.read(retryable);
+        }
+
+        public Executor getExecutor() {
+            return db.getExecutor();
+        }
+
+        public <T> T read(Function<? super ReadTransaction, T> retryable, Executor e) {
+            return db.read(retryable, e);
+        }
+
+        public <T> CompletableFuture<T> readAsync(
+                Function<? super ReadTransaction, ? extends CompletableFuture<T>> retryable) {
+            return db.readAsync(retryable);
+        }
+
+        public <T> CompletableFuture<T> readAsync(
+                Function<? super ReadTransaction, ? extends CompletableFuture<T>> retryable, Executor e) {
+            return db.readAsync(retryable, e);
+        }
+
+        public <T> T run(Function<? super Transaction, T> retryable) {
+            return db.run(retryable);
+        }
+
+        public <T> T run(Function<? super Transaction, T> retryable, Executor e) {
+            return db.run(retryable, e);
+        }
+
+        public <T> CompletableFuture<T> runAsync(
+                Function<? super Transaction, ? extends CompletableFuture<T>> retryable) {
+            return db.runAsync(retryable);
+        }
+
+        public <T> CompletableFuture<T> runAsync(
+                Function<? super Transaction, ? extends CompletableFuture<T>> retryable, Executor e) {
+            return db.runAsync(retryable, e);
+        }
+
+        public void close() {
+            db.close();
+            server.destroy();
+        }
+
+    }
+
+    static Database getTestDb(final boolean empty) throws IOException {
+        final String userDir = System.getProperty("user.dir");
+        final File fdbDir = new File(new File(userDir, "target"), ".fdblucene");
+        fdbDir.mkdir();
+
+        final int port = getAvailablePort();
+
+        final File clusterFile = new File(fdbDir, "fdblucene.cluster");
+        try (final PrintWriter writer = new PrintWriter(clusterFile)) {
+            writer.format("fdblucene:fdblucene@127.0.0.1:%d\n", port);
+        }
+
+        final Process fdbServer = startTestDb(fdbDir, clusterFile, port);
+        final Database result = FDB.instance().open(clusterFile.getAbsolutePath());
+        if (empty) {
+            clear(result);
+        }
+        return new TestDatabase(fdbServer, result);
+    }
+
+    static void clear(final Database db) {
+        db.run(txn -> {
+            txn.clear(new byte[0], new byte[] { (byte) 0xfe, (byte) 0xff, (byte) 0xff });
+            return null;
+        });
+    }
+
+    private static Process startTestDb(final File fdbDir, final File clusterFile, final int port)
+            throws IOException {
+        // Our own private fdbserver.
+        ProcessBuilder builder = new ProcessBuilder(findFdbServerBin(), "-p", String.format("127.0.0.1:%d", port), "-C",
+                clusterFile.getAbsolutePath(), "-d", fdbDir.getAbsolutePath(), "-L", fdbDir.getAbsolutePath());
+        final Process fdbServer = builder.start();
+
+        // Initialise the db
+        builder = new ProcessBuilder(findFdbCliBin(), "-C", clusterFile.getAbsolutePath(), "--exec",
+                "configure new single ssd");
+        try {
+            builder.start().waitFor();
+        } catch (InterruptedException e) {
+            // Ignored.
+        }
+
+        return fdbServer;
+    }
+
+    private static int getAvailablePort() throws IOException {
+        try (final ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
+    }
+
+    private static String findFdbServerBin() {
+        final String[] locations = new String[] { "/usr/sbin/fdbserver", "/usr/local/sbin/fdbserver",
+                "/usr/local/libexec/fdbserver" };
+        for (final String location : locations) {
+            if (new File(location).isFile()) {
+                return location;
+            }
+        }
+        throw new Error("fdbserver not found.");
+    }
+
+    private static String findFdbCliBin() {
+        final String[] locations = new String[] { "/usr/bin/fdbcli", "/usr/local/bin/fdbcli" };
+        for (final String location : locations) {
+            if (new File(location).isFile()) {
+                return location;
+            }
+        }
+        throw new Error("fdbserver not found.");
+    }
+
 
 }

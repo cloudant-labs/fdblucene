@@ -16,11 +16,13 @@
 package com.cloudant.fdblucene;
 
 import static org.junit.Assert.assertEquals;
+
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
+
 import org.apache.lucene.codecs.lucene84.Lucene84Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
@@ -39,6 +41,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -46,8 +49,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 
 @RunWith(Parameterized.class)
 public class SimpleFDBDirectoryTest {
@@ -60,9 +63,14 @@ public class SimpleFDBDirectoryTest {
     }
 
     @BeforeClass
-    public static void setupFDB() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
+    public static void setup() throws Exception {
+        DB = FDBUtil.getTestDb(true);
+    }
+
+    @AfterClass
+    public static void cleanup() {
+        FDBUtil.clear(DB);
+        DB.close();
     }
 
     private Directory dir;

@@ -32,7 +32,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 
 @RunWith(Parameterized.class)
 public class BoundaryTest {
@@ -51,21 +50,16 @@ public class BoundaryTest {
     }
 
     @BeforeClass
-    public static void setupClass() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
+    public static void setupClass() throws Exception {
+        DB = FDBUtil.getTestDb(true);
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
         DIR = FDBDirectory.open(DB, path, null);
     }
 
     @AfterClass
     public static void cleanupDir() throws Exception {
-        if (DIR == null) {
-            return;
-        }
-        for (final String name : DIR.listAll()) {
-            DIR.deleteFile(name);
-        }
+        FDBUtil.clear(DB);
+        DB.close();
     }
 
     private final int size;
