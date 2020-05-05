@@ -17,8 +17,12 @@ package com.cloudant.fdblucene;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -26,7 +30,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
@@ -180,6 +186,8 @@ public final class FDBDirectory extends Directory {
         return result;
     }
 
+    private static final byte[] LABEL = "fdblucene".getBytes(StandardCharsets.US_ASCII);
+
     private final TransactionContext txc;
     private final Subspace subspace;
     private boolean closed;
@@ -258,7 +266,7 @@ public final class FDBDirectory extends Directory {
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
         return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
-                secretKey, pageSize, txnSize);
+                deriveFileKey(name), pageSize, txnSize);
     }
 
     /**
@@ -354,7 +362,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
                 meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), secretKey, pageSize);
+                meta.getFileLength(), deriveFileKey(name), pageSize);
     }
 
     /**
@@ -468,6 +476,35 @@ public final class FDBDirectory extends Directory {
 
     private Tuple metaTuple(final String name) {
         return Tuple.from("_meta", name);
+    }
+
+    // SP 800-108 (HMAC SHA-256 Counter)
+    private SecretKey deriveFileKey(final String filename) throws IOException {
+        if (secretKey == null) {
+            return null;
+        }
+
+        final Mac mac;
+        try {
+            mac = Mac.getInstance("HmacSHA256");
+            mac.init(secretKey);
+        } catch (InvalidKeyException | NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
+        // iteration
+        mac.update((byte)1);
+        // label
+        mac.update(LABEL);
+        // separator
+        mac.update((byte)0);
+        // context
+        mac.update(subspace.getKey());
+        mac.update(filename.getBytes(StandardCharsets.UTF_8));
+        // output length (256 bits)
+        mac.update((byte) 1);
+        mac.update((byte) 0);
+
+        return new SecretKeySpec(mac.doFinal(), "AES");
     }
 
 }
