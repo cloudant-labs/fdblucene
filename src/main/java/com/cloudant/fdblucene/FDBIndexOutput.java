@@ -20,9 +20,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.zip.CRC32;
 
-import org.apache.lucene.store.IndexOutput;
+import javax.crypto.SecretKey;
 
-import com.cloudant.fdblucene.Utils;
+import org.apache.lucene.store.IndexOutput;
 
 import com.apple.foundationdb.Transaction;
 import com.apple.foundationdb.TransactionContext;
@@ -70,11 +70,13 @@ public final class FDBIndexOutput extends IndexOutput {
 
     private final ReadVersionCache readVersionCache;
 
+    private final SecretKey secretKey;
     private final int pageSize;
     private final int txnSize;
 
     FDBIndexOutput(final FDBDirectory dir, final String resourceDescription, final String name,
-            final TransactionContext txc, final byte[] metaKey, final Subspace subspace, final int pageSize,
+            final TransactionContext txc, final byte[] metaKey, final Subspace subspace, final SecretKey secretKey,
+            final int pageSize,
             final int txnSize) {
         super(resourceDescription, name);
         this.dir = dir;
@@ -82,6 +84,7 @@ public final class FDBIndexOutput extends IndexOutput {
         this.metaKey = metaKey;
         this.subspace = subspace;
         this.readVersionCache = new ReadVersionCache();
+        this.secretKey = secretKey;
         this.pageSize = pageSize;
         this.txnSize = txnSize;
         txnBuffer = new byte[txnSize];

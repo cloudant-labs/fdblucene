@@ -77,7 +77,7 @@ public class SimpleFDBDirectoryTest {
     @Before
     public void setupDir() throws Exception {
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
-        dir = FDBDirectory.open(DB, path, pageSize, txnSize);
+        dir = FDBDirectory.open(DB, path, null, pageSize, txnSize);
         cleanupDir();
     }
 
@@ -153,21 +153,21 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void addIndexes() throws Exception {
-        Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"), null);
         cleanupDir(dir1);
         IndexWriter writer1 = new IndexWriter(dir1, indexWriterConfig());
         addDocument(writer1, "foo1");
         writer1.commit();
         writer1.close();
 
-        Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"));
+        Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"), null);
         cleanupDir(dir2);
         IndexWriter writer2 = new IndexWriter(dir2, indexWriterConfig());
         addDocument(writer2, "foo2");
         writer2.commit();
         writer2.close();
 
-        Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"));
+        Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"), null);
         cleanupDir(dir3);
         IndexWriter writer3 = new IndexWriter(dir3, indexWriterConfig());
         writer3.addIndexes(dir1, dir2);
@@ -181,7 +181,7 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void testCloseAfterDeleteShouldntThrow() throws Exception {
-        final Directory dir = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        final Directory dir = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"), null);
         assertCloseDoesntThrowOnDeletedFile(dir);
     }
 

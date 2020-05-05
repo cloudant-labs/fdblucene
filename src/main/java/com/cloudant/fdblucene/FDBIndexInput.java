@@ -15,9 +15,12 @@ package com.cloudant.fdblucene;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicLong;
+
+import javax.crypto.SecretKey;
+
 import org.apache.lucene.store.BufferedIndexInput;
 import org.apache.lucene.store.IndexInput;
+
 import com.apple.foundationdb.TransactionContext;
 import com.apple.foundationdb.subspace.Subspace;
 
@@ -32,17 +35,19 @@ public class FDBIndexInput extends BufferedIndexInput {
     private final String name;
     private final long off;
     private final long end;
+    private final SecretKey secretKey;
     private final int pageSize;
     private ReadVersionCache readVersionCache;
 
     public FDBIndexInput(final String resourceDescription, final TransactionContext txc, final Subspace subspace,
-            final String name, final long off, final long length, final int pageSize) {
+            final String name, final long off, final long length, final SecretKey secretKey, final int pageSize) {
         super(resourceDescription, pageSize);
         this.txc = txc;
         this.subspace = subspace;
         this.name = name;
         this.off = off;
         this.end = off + length;
+        this.secretKey = secretKey;
         this.pageSize = pageSize;
         this.readVersionCache = new ReadVersionCache();
     }
@@ -88,7 +93,7 @@ public class FDBIndexInput extends BufferedIndexInput {
                     + ",length=" + length + ",fileLength=" + this.length() + ": " + this);
         }
         return new FDBIndexInput(getFullSliceDescription(sliceDescription), txc, subspace, name, off + offset, length,
-                pageSize);
+                secretKey, pageSize);
     }
 
     @Override

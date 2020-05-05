@@ -39,7 +39,7 @@ public class FDBLockTest extends BaseLockFactoryTestCase {
 
     @Override
     protected Directory getDirectory(final Path path) throws IOException {
-        return FDBDirectory.open(DB, path);
+        return FDBDirectory.open(DB, path, null);
     }
 
 }

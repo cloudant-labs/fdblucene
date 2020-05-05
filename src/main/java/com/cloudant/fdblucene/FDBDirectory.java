@@ -26,14 +26,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.crypto.SecretKey;
+
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
-
-import com.cloudant.fdblucene.Utils;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
@@ -92,78 +92,84 @@ public final class FDBDirectory extends Directory {
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc  The {@link TransactionContext} that will be used for all
-     *             transactions. This is typically a {@link Database}.
-     * @param path The (virtual) path where this directory is located. This option
-     *             is provided for compatibility with the Lucene test framework. No
-     *             data will be written to this path of the filesystem.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param path      The (virtual) path where this directory is located. This
+     *                  option is provided for compatibility with the Lucene test
+     *                  framework. No data will be written to this path of the
+     *                  filesystem.
+     * @param secretKey The secret key used to encrypt the index. May be null.
      * @return an instance of FDBDirectory
      */
-    public static FDBDirectory open(final TransactionContext txc, final Path path) {
-        return open(txc, path, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    public static FDBDirectory open(final TransactionContext txc, final Path path, final SecretKey secretKey) {
+        return open(txc, path, secretKey, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param subspace The {@link Subspace} to create all key-value entries under.
-     *                 This is useful if using Lucene indexes in a wider context.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param subspace  The {@link Subspace} to create all key-value entries under.
+     *                  This is useful if using Lucene indexes in a wider context.
+     * @param secretKey The secret key used to encrypt the index. May be null.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace) {
-        return open(txc, subspace, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey) {
+        return open(txc, subspace, secretKey, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param path     The (virtual) path where this directory is located. This
-     *                 option is provided for compatibility with the Lucene test
-     *                 framework. No data will be written to this path of the
-     *                 filesystem.
-     * @param pageSize The size of the value stored in FoundationDB. Must be less
-     *                 that {@code txnSize}. This value is ignored if the directory
-     *                 already exists.
-     * @param txnSize  The maximum size of the transaction FDBDirectory will make
-     *                 when writing to FoundationDB. Must be at least as large as
-     *                 {@code pageSize}.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param path      The (virtual) path where this directory is located. This
+     *                  option is provided for compatibility with the Lucene test
+     *                  framework. No data will be written to this path of the
+     *                  filesystem.
+     * @param secretKey The secret key used to encrypt the index. May be null.
+     * @param pageSize  The size of the value stored in FoundationDB. Must be less
+     *                  that {@code txnSize}. This value is ignored if the directory
+     *                  already exists.
+     * @param txnSize   The maximum size of the transaction FDBDirectory will make
+     *                  when writing to FoundationDB. Must be at least as large as
+     *                  {@code pageSize}.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Path path, final int pageSize,
+    public static FDBDirectory open(final TransactionContext txc, final Path path, final SecretKey secretKey,
+            final int pageSize,
             final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
         final DirectorySubspace dir = dirLayer.createOrOpen(txc, pathAsList(path)).join();
-        return open(txc, dir, pageSize, txnSize);
+        return open(txc, dir, secretKey, pageSize, txnSize);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param subspace The {@link Subspace} to create all key-value entries under.
-     *                 This is useful if using Lucene indexes in a wider context.
-     * @param pageSize The size of the value stored in FoundationDB. Must be less
-     *                 that {@code txnSize}. This value is ignored if the directory
-     *                 already exists.
-     * @param txnSize  The maximum size of the transaction FDBDirectory will make
-     *                 when writing to FoundationDB. Must be at least as large as
-     *                 {@code pageSize}.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param subspace  The {@link Subspace} to create all key-value entries under.
+     *                  This is useful if using Lucene indexes in a wider context.
+     * @param secretKey The secret key used to encrypt the index. May be null.
+     * @param pageSize  The size of the value stored in FoundationDB. Must be less
+     *                  that {@code txnSize}. This value is ignored if the directory
+     *                  already exists.
+     * @param txnSize   The maximum size of the transaction FDBDirectory will make
+     *                  when writing to FoundationDB. Must be at least as large as
+     *                  {@code pageSize}.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final int pageSize,
-            final int txnSize) {
-        return new FDBDirectory(txc, subspace, pageSize, txnSize);
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey,
+            final int pageSize, final int txnSize) {
+        return new FDBDirectory(txc, subspace, secretKey, pageSize, txnSize);
     }
 
     private static List<String> pathAsList(final Path path) {
@@ -177,16 +183,20 @@ public final class FDBDirectory extends Directory {
     private final TransactionContext txc;
     private final Subspace subspace;
     private boolean closed;
+    private final SecretKey secretKey;
     private final int pageSize;
     private final int txnSize;
 
     private final UUID uuid;
 
-    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
+    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey,
+            final int pageSize,
+            final int txnSize) {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
         this.uuid = UUID.randomUUID();
+        this.secretKey = secretKey;
         this.pageSize = getOrSetPageSize(txc, subspace, pageSize);
         this.txnSize = txnSize;
 
@@ -248,7 +258,7 @@ public final class FDBDirectory extends Directory {
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
         return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
-                pageSize, txnSize);
+                secretKey, pageSize, txnSize);
     }
 
     /**
@@ -344,7 +354,7 @@ public final class FDBDirectory extends Directory {
         final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
                 meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), pageSize);
+                meta.getFileLength(), secretKey, pageSize);
     }
 
     /**

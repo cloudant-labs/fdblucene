@@ -55,7 +55,7 @@ public class BoundaryTest {
         FDB.selectAPIVersion(600);
         DB = FDB.instance().open();
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
-        DIR = FDBDirectory.open(DB, path);
+        DIR = FDBDirectory.open(DB, path, null);
     }
 
     @AfterClass

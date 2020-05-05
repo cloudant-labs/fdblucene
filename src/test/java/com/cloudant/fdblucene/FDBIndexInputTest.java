@@ -157,7 +157,7 @@ public class FDBIndexInputTest extends BaseFDBTest {
 
     @Test
     public void testReadByte() throws Exception {
-        try (final IndexInput in = new FDBIndexInput("foo", DB, subspace, "BAR", off, length, pageSize)) {
+        try (final IndexInput in = new FDBIndexInput("foo", DB, subspace, "BAR", off, length, null, pageSize)) {
             final byte expectedValue = (byte) (FDBUtil.posToPage(off, pageSize) % 255);
             final String msg = String.format("off=%d, length=%d, pageSize=%d", off, length, pageSize);
             try {
