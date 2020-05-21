@@ -15,6 +15,8 @@
  *******************************************************************************/
 package com.cloudant.fdblucene;
 
+import com.apple.foundationdb.FDB;
+
 class FDBTestUtil {
 
     static byte[] testArray(final int size) {
@@ -24,5 +26,6 @@ class FDBTestUtil {
         }
         return result;
     }
+
 
 }

@@ -60,7 +60,8 @@ final class FDBLock extends Lock {
         }
     }
 
-    FDBLock(final TransactionContext txc, final byte[] key, final byte[] uuidBytes, final UUID uuid, final String name) {
+    FDBLock(final TransactionContext txc, final byte[] key, final byte[] uuidBytes, final UUID uuid,
+            final String name) {
         this.txc = txc;
         this.uuidBytes = uuidBytes;
         this.uuid = uuid;
@@ -108,7 +109,8 @@ final class FDBLock extends Lock {
         }
     }
 
-    public static void unlock(final TransactionContext txc, final Subspace subspace, final UUID uuid, final String name) {
+    public static void unlock(final TransactionContext txc, final Subspace subspace, final UUID uuid,
+            final String name) {
         final byte[] key = lockKey(subspace, name);
         txc.run(txn -> {
             Utils.trace(txn, "FDBLock.unlock(%s,%s)", name, uuid);

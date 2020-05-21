@@ -20,11 +20,10 @@ import static org.junit.Assert.assertEquals;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.apache.lucene.codecs.lucene80.Lucene80Codec;
+import org.apache.lucene.codecs.lucene84.Lucene84Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
@@ -42,6 +41,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -51,7 +51,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 
 @RunWith(Parameterized.class)
 public class SimpleFDBDirectoryTest {
@@ -60,16 +59,18 @@ public class SimpleFDBDirectoryTest {
 
     @Parameters
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][]{
-                {1_000, 100_000},
-                {10_000, 1_000_000},
-                {100_000, 1_000_000}});
+        return Arrays.asList(new Object[][] { { 1_000, 100_000 }, { 10_000, 1_000_000 }, { 100_000, 1_000_000 } });
     }
 
     @BeforeClass
-    public static void setupFDB() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
+    public static void setup() throws Exception {
+        DB = FDBUtil.getTestDb(true);
+    }
+
+    @AfterClass
+    public static void cleanup() {
+        FDBUtil.clear(DB);
+        DB.close();
     }
 
     private Directory dir;
@@ -84,7 +85,7 @@ public class SimpleFDBDirectoryTest {
     @Before
     public void setupDir() throws Exception {
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
-        dir = FDBDirectory.open(DB, path, pageSize, txnSize);
+        dir = FDBDirectory.open(DB, path, null, pageSize, txnSize);
         cleanupDir();
     }
 
@@ -160,21 +161,21 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void addIndexes() throws Exception {
-        Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        Directory dir1 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"), null);
         cleanupDir(dir1);
         IndexWriter writer1 = new IndexWriter(dir1, indexWriterConfig());
         addDocument(writer1, "foo1");
         writer1.commit();
         writer1.close();
 
-        Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"));
+        Directory dir2 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test2"), null);
         cleanupDir(dir2);
         IndexWriter writer2 = new IndexWriter(dir2, indexWriterConfig());
         addDocument(writer2, "foo2");
         writer2.commit();
         writer2.close();
 
-        Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"));
+        Directory dir3 = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test3"), null);
         cleanupDir(dir3);
         IndexWriter writer3 = new IndexWriter(dir3, indexWriterConfig());
         writer3.addIndexes(dir1, dir2);
@@ -188,7 +189,7 @@ public class SimpleFDBDirectoryTest {
 
     @Test
     public void testCloseAfterDeleteShouldntThrow() throws Exception {
-        final Directory dir = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"));
+        final Directory dir = FDBDirectory.open(DB, FileSystems.getDefault().getPath("lucene", "test1"), null);
         assertCloseDoesntThrowOnDeletedFile(dir);
     }
 
@@ -209,7 +210,7 @@ public class SimpleFDBDirectoryTest {
     private IndexWriterConfig indexWriterConfig() {
         final IndexWriterConfig config = new IndexWriterConfig();
         config.setUseCompoundFile(false);
-        config.setCodec(new Lucene80Codec());
+        config.setCodec(new Lucene84Codec());
         return config;
     }
 

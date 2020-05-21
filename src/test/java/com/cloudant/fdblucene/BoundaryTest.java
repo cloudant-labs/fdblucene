@@ -32,7 +32,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.apple.foundationdb.Database;
-import com.apple.foundationdb.FDB;
 
 @RunWith(Parameterized.class)
 public class BoundaryTest {
@@ -42,38 +41,25 @@ public class BoundaryTest {
 
     @Parameters
     public static Collection<Integer> data() {
-        return Arrays.asList(
-                0,
-                1,
-                FDBUtil.DEFAULT_PAGE_SIZE - 2,
-                FDBUtil.DEFAULT_PAGE_SIZE - 1,
-                FDBUtil.DEFAULT_PAGE_SIZE,
-                FDBUtil.DEFAULT_PAGE_SIZE + 1,
-                FDBUtil.DEFAULT_PAGE_SIZE + 2,
+        return Arrays.asList(0, 1, FDBUtil.DEFAULT_PAGE_SIZE - 2, FDBUtil.DEFAULT_PAGE_SIZE - 1,
+                FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_PAGE_SIZE + 1, FDBUtil.DEFAULT_PAGE_SIZE + 2,
 
-                (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 2,
-                (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 1,
-                (2 * FDBUtil.DEFAULT_PAGE_SIZE),
-                (2 * FDBUtil.DEFAULT_PAGE_SIZE) + 1,
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 2, (2 * FDBUtil.DEFAULT_PAGE_SIZE) - 1,
+                (2 * FDBUtil.DEFAULT_PAGE_SIZE), (2 * FDBUtil.DEFAULT_PAGE_SIZE) + 1,
                 (2 * FDBUtil.DEFAULT_PAGE_SIZE) + 2);
     }
 
     @BeforeClass
-    public static void setupClass() {
-        FDB.selectAPIVersion(600);
-        DB = FDB.instance().open();
+    public static void setupClass() throws Exception {
+        DB = FDBUtil.getTestDb(true);
         final Path path = FileSystems.getDefault().getPath("lucene", "test");
-        DIR = FDBDirectory.open(DB, path);
+        DIR = FDBDirectory.open(DB, path, null);
     }
 
     @AfterClass
     public static void cleanupDir() throws Exception {
-        if (DIR == null) {
-            return;
-        }
-        for (final String name : DIR.listAll()) {
-            DIR.deleteFile(name);
-        }
+        FDBUtil.clear(DB);
+        DB.close();
     }
 
     private final int size;

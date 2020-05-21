@@ -18,7 +18,10 @@ package com.cloudant.fdblucene;
 import java.io.IOException;
 import java.nio.file.Path;
 
-import org.apache.lucene.store.BaseLockFactoryTestCase;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.lucene.store.BaseDirectoryTestCase;
 import org.apache.lucene.store.Directory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -27,24 +30,25 @@ import com.apple.foundationdb.Database;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-public class FDBLockTest extends BaseLockFactoryTestCase {
+public class EncryptedFDBDirectoryTest extends BaseDirectoryTestCase {
 
-    private static Database DB;
+    private static Database db;
 
     @BeforeClass
     public static void setup() throws Exception {
-        DB = FDBUtil.getTestDb(true);
+        db = FDBUtil.getTestDb(true);
     }
 
     @AfterClass
     public static void cleanup() {
-        FDBUtil.clear(DB);
-        DB.close();
+        FDBUtil.clear(db);
+        db.close();
     }
 
     @Override
     protected Directory getDirectory(final Path path) throws IOException {
-        return FDBDirectory.open(DB, path, null);
+        final SecretKey secretKey = new SecretKeySpec(new byte[32], "AES");
+        return FDBDirectory.open(db, path, secretKey);
     }
 
 }

@@ -19,6 +19,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -26,14 +29,18 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
-
-import com.cloudant.fdblucene.Utils;
 
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.KeyValue;
@@ -51,16 +58,26 @@ import com.apple.foundationdb.tuple.Tuple;
  */
 public final class FDBDirectory extends Directory {
 
+    private static final SecureRandom RND;
+
+    static {
+        try {
+            RND = SecureRandom.getInstanceStrong();
+        } catch (final NoSuchAlgorithmException e) {
+            throw new Error(e);
+        }
+    }
+
     static class FileMetaData {
 
         private final Tuple asTuple;
 
-        public FileMetaData(final long fileNumber, final long fileLength) {
-            this.asTuple = Tuple.from(fileNumber, fileLength);
+        public FileMetaData(final long fileNumber, final long fileLength, final byte[] wrappedKey) {
+            this.asTuple = Tuple.from(fileNumber, fileLength, wrappedKey);
         }
 
         public FileMetaData(final Tuple tuple) {
-            if (tuple.size() != 2) {
+            if (tuple.size() != 3) {
                 throw new IllegalArgumentException(tuple + " is not a file metadata tuple");
             }
             this.asTuple = tuple;
@@ -78,8 +95,12 @@ public final class FDBDirectory extends Directory {
             return asTuple.getLong(1);
         }
 
+        public byte[] getWrappedKey() {
+            return asTuple.getBytes(2);
+        }
+
         public FileMetaData setFileLength(final long fileLength) {
-            return new FileMetaData(getFileNumber(), fileLength);
+            return new FileMetaData(getFileNumber(), fileLength, getWrappedKey());
         }
 
         public byte[] pack() {
@@ -92,78 +113,83 @@ public final class FDBDirectory extends Directory {
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc  The {@link TransactionContext} that will be used for all
-     *             transactions. This is typically a {@link Database}.
-     * @param path The (virtual) path where this directory is located. This option
-     *             is provided for compatibility with the Lucene test framework. No
-     *             data will be written to this path of the filesystem.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param path      The (virtual) path where this directory is located. This
+     *                  option is provided for compatibility with the Lucene test
+     *                  framework. No data will be written to this path of the
+     *                  filesystem.
+     * @param secretKey The secret key used to encrypt the index. May be null.
      * @return an instance of FDBDirectory
      */
-    public static FDBDirectory open(final TransactionContext txc, final Path path) {
-        return open(txc, path, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    public static FDBDirectory open(final TransactionContext txc, final Path path, final SecretKey secretKey) {
+        return open(txc, path, secretKey, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param subspace The {@link Subspace} to create all key-value entries under.
-     *                 This is useful if using Lucene indexes in a wider context.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param subspace  The {@link Subspace} to create all key-value entries under.
+     *                  This is useful if using Lucene indexes in a wider context.
+     * @param secretKey The secret key used to encrypt the index. May be null.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace) {
-        return open(txc, subspace, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey) {
+        return open(txc, subspace, secretKey, FDBUtil.DEFAULT_PAGE_SIZE, FDBUtil.DEFAULT_TXN_SIZE);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param path     The (virtual) path where this directory is located. This
-     *                 option is provided for compatibility with the Lucene test
-     *                 framework. No data will be written to this path of the
-     *                 filesystem.
-     * @param pageSize The size of the value stored in FoundationDB. Must be less
-     *                 that {@code txnSize}. This value is ignored if the directory
-     *                 already exists.
-     * @param txnSize  The maximum size of the transaction FDBDirectory will make
-     *                 when writing to FoundationDB. Must be at least as large as
-     *                 {@code pageSize}.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param path      The (virtual) path where this directory is located. This
+     *                  option is provided for compatibility with the Lucene test
+     *                  framework. No data will be written to this path of the
+     *                  filesystem.
+     * @param secretKey The secret key used to encrypt the index. May be null.
+     * @param pageSize  The size of the value stored in FoundationDB. Must be less
+     *                  that {@code txnSize}. This value is ignored if the directory
+     *                  already exists.
+     * @param txnSize   The maximum size of the transaction FDBDirectory will make
+     *                  when writing to FoundationDB. Must be at least as large as
+     *                  {@code pageSize}.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Path path, final int pageSize,
-            final int txnSize) {
+    public static FDBDirectory open(final TransactionContext txc, final Path path, final SecretKey secretKey,
+            final int pageSize, final int txnSize) {
         final DirectoryLayer dirLayer = DirectoryLayer.getDefault();
         final DirectorySubspace dir = dirLayer.createOrOpen(txc, pathAsList(path)).join();
-        return open(txc, dir, pageSize, txnSize);
+        return open(txc, dir, secretKey, pageSize, txnSize);
     }
 
     /**
      * Opens a Directory (or creates an empty one if there is no existing directory)
      * at the provided {@code path}.
      *
-     * @param txc      The {@link TransactionContext} that will be used for all
-     *                 transactions. This is typically a {@link Database}.
-     * @param subspace The {@link Subspace} to create all key-value entries under.
-     *                 This is useful if using Lucene indexes in a wider context.
-     * @param pageSize The size of the value stored in FoundationDB. Must be less
-     *                 that {@code txnSize}. This value is ignored if the directory
-     *                 already exists.
-     * @param txnSize  The maximum size of the transaction FDBDirectory will make
-     *                 when writing to FoundationDB. Must be at least as large as
-     *                 {@code pageSize}.
+     * @param txc       The {@link TransactionContext} that will be used for all
+     *                  transactions. This is typically a {@link Database}.
+     * @param subspace  The {@link Subspace} to create all key-value entries under.
+     *                  This is useful if using Lucene indexes in a wider context.
+     * @param secretKey The secret key used to encrypt the index. May be null.
+     * @param pageSize  The size of the value stored in FoundationDB. Must be less
+     *                  that {@code txnSize}. This value is ignored if the directory
+     *                  already exists.
+     * @param txnSize   The maximum size of the transaction FDBDirectory will make
+     *                  when writing to FoundationDB. Must be at least as large as
+     *                  {@code pageSize}.
      * @return an instance of FDBDirectory
      * @throws IllegalArgumentException if txnSize is smaller than pageSize.
      */
-    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final int pageSize,
-            final int txnSize) {
-        return new FDBDirectory(txc, subspace, pageSize, txnSize);
+    public static FDBDirectory open(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey,
+            final int pageSize, final int txnSize) {
+        return new FDBDirectory(txc, subspace, secretKey, pageSize, txnSize);
     }
 
     private static List<String> pathAsList(final Path path) {
@@ -177,16 +203,19 @@ public final class FDBDirectory extends Directory {
     private final TransactionContext txc;
     private final Subspace subspace;
     private boolean closed;
+    private final SecretKey secretKey;
     private final int pageSize;
     private final int txnSize;
 
     private final UUID uuid;
 
-    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final int pageSize, final int txnSize) {
+    private FDBDirectory(final TransactionContext txc, final Subspace subspace, final SecretKey secretKey,
+            final int pageSize, final int txnSize) {
         this.txc = txc;
         this.subspace = subspace;
         this.closed = false;
         this.uuid = UUID.randomUUID();
+        this.secretKey = secretKey;
         this.pageSize = getOrSetPageSize(txc, subspace, pageSize);
         this.txnSize = txnSize;
 
@@ -230,6 +259,16 @@ public final class FDBDirectory extends Directory {
 
         final byte[] key = metaKey(name);
 
+        final SecretKey fileKey;
+        final byte[] wrappedKey;
+        if (secretKey != null) {
+            fileKey = newKey();
+            wrappedKey = wrap(secretKey, fileKey);
+        } else {
+            fileKey = null;
+            wrappedKey = null;
+        }
+
         final long fileNumber = txc.run(txn -> {
             Utils.trace(txn, "FDBDirectory.createOutput(%s)", name);
             final byte[] value = txn.get(key).join();
@@ -238,7 +277,7 @@ public final class FDBDirectory extends Directory {
             }
 
             final long result = getAndIncrement(txn, "_fn");
-            txn.set(key, new FileMetaData(result, 0L).pack());
+            txn.set(key, new FileMetaData(result, 0L, wrappedKey).pack());
             return result;
         });
 
@@ -248,7 +287,7 @@ public final class FDBDirectory extends Directory {
 
         final String resourceDescription = String.format("FDBIndexOutput(name=%s,number=%d)", name, fileNumber);
         return new FDBIndexOutput(this, resourceDescription, name, txc, metaKey(name), fileSubspace(fileNumber),
-                pageSize, txnSize);
+                fileKey, adjustedPageSize(), txnSize);
     }
 
     /**
@@ -262,8 +301,8 @@ public final class FDBDirectory extends Directory {
             throws IOException {
         while (true) {
             final long number = FDBUtil.RANDOM.nextInt();
-            final String name = String
-                    .format("%s_%s_%s.tmp", prefix, suffix, Long.toString(number, Character.MAX_RADIX));
+            final String name = String.format("%s_%s_%s.tmp", prefix, suffix,
+                    Long.toString(number, Character.MAX_RADIX));
             try {
                 return createOutput(name, context);
             } catch (final FileAlreadyExistsException e) {
@@ -341,10 +380,10 @@ public final class FDBDirectory extends Directory {
             throw new FileNotFoundException(name + " does not exist.");
         }
 
-        final String resourceDescription = String
-                .format("FDBIndexInput(name=%s,number=%d)", name, meta.getFileNumber());
+        final String resourceDescription = String.format("FDBIndexInput(name=%s,number=%d)", name,
+                meta.getFileNumber());
         return new FDBIndexInput(resourceDescription, txc, fileSubspace(meta.getFileNumber()), name, 0L,
-                meta.getFileLength(), pageSize);
+                meta.getFileLength(), maybeUnwrapKey(meta), adjustedPageSize());
     }
 
     /**
@@ -458,6 +497,48 @@ public final class FDBDirectory extends Directory {
 
     private Tuple metaTuple(final String name) {
         return Tuple.from("_meta", name);
+    }
+
+    private SecretKey maybeUnwrapKey(final FileMetaData meta) throws IOException {
+        final byte[] wrappedKey = meta.getWrappedKey();
+        if (wrappedKey == null) {
+            return null;
+        }
+        return unwrap(secretKey, wrappedKey);
+    }
+
+    private SecretKey newKey() {
+        final byte[] bytes = new byte[32];
+        RND.nextBytes(bytes);
+        return new SecretKeySpec(bytes, "AES");
+    }
+
+    private static byte[] wrap(final SecretKey wrappingKey, final SecretKey keyToWrap) throws IOException {
+        try {
+            final Cipher cipher = Cipher.getInstance("AESWrap");
+            cipher.init(Cipher.WRAP_MODE, wrappingKey);
+            return cipher.wrap(keyToWrap);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException
+                | IllegalBlockSizeException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static SecretKey unwrap(final SecretKey wrappingKey, final byte[] wrappedKey)
+            throws IOException {
+        try {
+            final Cipher cipher = Cipher.getInstance("AESWrap");
+            cipher.init(Cipher.UNWRAP_MODE, wrappingKey);
+            return (SecretKey) cipher.unwrap(wrappedKey, "AES", Cipher.SECRET_KEY);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException e) {
+            throw new IOException(e);
+        }
+    }
+
+
+    // If encryption is set up, subtract the GCM overhead.
+    private int adjustedPageSize() {
+        return secretKey == null ? pageSize : pageSize - 16;
     }
 
 }
